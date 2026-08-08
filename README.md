@@ -6,12 +6,26 @@ Pure Rust, no dependencies — not even ffmpeg. The MOV/MP4 container is parsed
 directly, and the H.264 and AAC samples inside are packetised into RTP and
 served over an RTSP server written from scratch.
 
-## Usage
+## How to run
+
+### 1. Build
 
 ```sh
 cargo build --release
-./target/release/rtsp-utils mock_video.mov
 ```
+
+### 2. Serve a file
+
+```powershell
+.\target\release\rtsp-utils.exe mock_video.mov --name 91
+```
+
+```sh
+# macOS / Linux
+./target/release/rtsp-utils mock_video.mov --name 91
+```
+
+It prints what it found and the URL, then serves until you press Ctrl-C:
 
 ```
 mock_video.mov
@@ -20,15 +34,31 @@ mock_video.mov
   audio     AAC 48000 Hz  1 ch  15820 samples  [trackID=1]
 
 RTSP URL:
-  rtsp://127.0.0.1:8554/mock_video
+  rtsp://127.0.0.1:8554/91
+
+Listening on rtsp://0.0.0.0:8554 (Ctrl-C to stop)
 ```
 
-Open that URL in any RTSP client:
+Without `--name` the stream is named after the file, so `mock_video.mov`
+would be served at `rtsp://127.0.0.1:8554/mock_video`.
+
+### 3. Play it
+
+Leave the server running and open the URL in any RTSP client:
 
 ```sh
-ffplay -rtsp_transport tcp rtsp://127.0.0.1:8554/mock_video
-vlc rtsp://127.0.0.1:8554/mock_video
+ffplay -rtsp_transport tcp rtsp://127.0.0.1:8554/91
+vlc rtsp://127.0.0.1:8554/91
 ```
+
+If you have no player installed, VLC is the quickest to get:
+
+```powershell
+winget install VideoLAN.VLC
+```
+
+You don't strictly need one — `cargo test --release` drives the same code path
+end to end with the RTSP client built into the test suite.
 
 ### Options
 
@@ -39,14 +69,34 @@ vlc rtsp://127.0.0.1:8554/mock_video
 | `--host <HOST>` | `127.0.0.1` | Host to advertise in the printed URL |
 | `--no-loop` | off | Stop at the end of the file instead of restarting |
 | `--probe` | off | Print the media layout and URL, then exit |
+| `-h`, `--help` | | Show usage |
 
-To serve it to other machines on the network, advertise the address they
-will reach you on:
+### Common variations
 
 ```sh
+# inspect the file without serving it
+rtsp-utils mock_video.mov --probe
+
+# reachable from other machines: advertise the address they will dial
 rtsp-utils mock_video.mov --name 91 --host 192.168.1.20
 # -> rtsp://192.168.1.20:8554/91
+
+# a different port, and play through once instead of looping
+rtsp-utils mock_video.mov --bind 8555 --no-loop
 ```
+
+### If the player stalls
+
+A client that defaults to UDP may sit there with a black window, usually
+because a firewall is dropping the inbound RTP ports. Force the interleaved
+TCP transport instead — it is fully supported, and it needs no ports beyond
+the RTSP connection itself:
+
+- **ffplay**: `-rtsp_transport tcp`
+- **VLC**: *Tools → Preferences → Input/Codecs → "RTP over RTSP (TCP)"*
+
+`--host` matters too: the URL has to name an address the client can reach.
+`127.0.0.1` only works on this machine, however you bound the listener.
 
 ## What it supports
 
@@ -122,11 +172,16 @@ SDP is well formed, that RTP sequence numbers are contiguous, that parameter
 sets are repeated in band, that RTCP reports arrive, and that the frame rate
 and the RTP clock both track real time.
 
-They need a sample file. By default they look for `91.mov` in the crate root;
-point them elsewhere with:
+They need a sample file, and pick up any `.mov` or `.mp4` sitting in the crate
+root on their own. To point them at one somewhere else:
 
 ```sh
 RTSP_UTILS_TEST_FILE=/path/to/video.mov cargo test
 ```
 
-They skip themselves, rather than fail, when no media is present.
+```powershell
+$env:RTSP_UTILS_TEST_FILE = "D:\media\video.mov"; cargo test
+```
+
+They skip themselves, rather than fail, when no media is present — the sample
+video is deliberately not committed.

@@ -1,9 +1,10 @@
 //! End-to-end tests: they start the real server and drive it with a real RTSP
 //! client over a socket.
 //!
-//! They need a sample file in the crate root. Set `RTSP_UTILS_TEST_FILE` to
-//! point somewhere else; the tests skip themselves when no file is present,
-//! because the media is deliberately not committed.
+//! They need a sample file. By default they pick up any `.mov` or `.mp4` in
+//! the crate root; set `RTSP_UTILS_TEST_FILE` to name one explicitly. The
+//! tests skip themselves when no media is present, because it is deliberately
+//! not committed.
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpStream, UdpSocket};
@@ -17,16 +18,36 @@ use rtsp_utils::domain::media::{CodecParams, MediaSource};
 use rtsp_utils::infrastructure::mp4::{FileSampleReaderFactory, Mp4Probe};
 use rtsp_utils::infrastructure::rtsp::RtspServer;
 
-const DEFAULT_TEST_FILE: &str = "91.mov";
-
 /// How long to sit and collect media before judging the stream.
 const OBSERVE: Duration = Duration::from_secs(4);
 
+/// Locates sample media: an explicit path if one is given, otherwise the first
+/// container sitting in the crate root.
+///
+/// The crate root is resolved from `CARGO_MANIFEST_DIR` rather than the working
+/// directory, which is not guaranteed to be anywhere in particular.
 fn test_file() -> Option<PathBuf> {
-    let path = std::env::var("RTSP_UTILS_TEST_FILE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(DEFAULT_TEST_FILE));
-    path.is_file().then_some(path)
+    if let Ok(configured) = std::env::var("RTSP_UTILS_TEST_FILE") {
+        let path = PathBuf::from(configured);
+        return path.is_file().then_some(path);
+    }
+
+    let mut candidates: Vec<PathBuf> = std::fs::read_dir(env!("CARGO_MANIFEST_DIR"))
+        .ok()?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.is_file()
+                && path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("mov") || e.eq_ignore_ascii_case("mp4"))
+        })
+        .collect();
+
+    // Sort so a directory with several files still picks the same one twice.
+    candidates.sort();
+    candidates.into_iter().next()
 }
 
 struct Server {
