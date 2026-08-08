@@ -41,6 +41,33 @@ pub trait Packetizer: Send {
     fn next_sequence(&self) -> u16;
 }
 
+/// One coded sample on its way into a container fragment.
+pub struct FragmentSample<'a> {
+    pub data: &'a [u8],
+    /// How long this sample is shown, in the track's timescale.
+    pub duration: u32,
+    /// Presentation time relative to decode time; non-zero with B-frames.
+    pub composition_offset: i32,
+    pub keyframe: bool,
+}
+
+/// Packages coded samples into a container a browser can play, emitted as an
+/// initialisation segment followed by media fragments.
+pub trait MediaFragmenter: Send {
+    /// Everything a decoder needs before the first fragment arrives.
+    fn init_segment(&self) -> Result<Vec<u8>>;
+    fn push(&mut self, sample: FragmentSample<'_>);
+    /// Emits the accumulated samples as one fragment, if there are any.
+    fn flush(&mut self) -> Option<Vec<u8>>;
+    /// Duration accumulated since the last flush, in the track's timescale.
+    fn buffered_duration(&self) -> u64;
+}
+
+/// A byte stream to a connected client, such as a chunked HTTP response.
+pub trait ByteSink {
+    fn write_chunk(&mut self, bytes: &[u8]) -> Result<()>;
+}
+
 /// Formats the periodic RTCP Sender Reports that let a receiver line up the
 /// audio and video clocks.
 pub trait RtcpReporter: Send + Sync {

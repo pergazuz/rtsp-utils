@@ -30,6 +30,18 @@ pub struct H264Params {
     pub height: u16,
 }
 
+impl H264Params {
+    /// The `codecs=` identifier used by MIME types and Media Source
+    /// Extensions, e.g. `avc1.4d001f`: the profile, constraint flags and level
+    /// bytes that follow the SPS NAL header.
+    pub fn codec_string(&self) -> String {
+        let profile = self.sps.get(1).copied().unwrap_or(0x42);
+        let compatibility = self.sps.get(2).copied().unwrap_or(0);
+        let level = self.sps.get(3).copied().unwrap_or(0x1e);
+        format!("avc1.{profile:02x}{compatibility:02x}{level:02x}")
+    }
+}
+
 /// AAC decoder setup, taken from the AudioSpecificConfig in the container.
 #[derive(Debug, Clone)]
 pub struct AacParams {

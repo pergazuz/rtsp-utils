@@ -9,8 +9,9 @@ use std::thread;
 use super::message::{read_request, Request, Response};
 use super::sdp;
 use super::transport::{bind_udp_pair, parse_transport, SessionSink, TransportSpec, UdpPair};
-use crate::application::{PlaybackSession, ServerConfig, StreamRegistry, TrackStream};
-use crate::domain::media::MediaSource;
+use crate::application::{
+    PlaybackSession, PublishedStream, ServerConfig, StreamRegistry, TrackStream,
+};
 use crate::domain::ports::{Packetizer, RtcpReporter, SampleReaderFactory};
 use crate::domain::{Error, Result};
 use crate::infrastructure::rtp::{packet, packetizer_for, StandardRtcpReporter};
@@ -94,7 +95,7 @@ struct Connection {
     control: Arc<Mutex<TcpStream>>,
     reader: BufReader<TcpStream>,
     session_id: Option<String>,
-    source: Option<Arc<MediaSource>>,
+    stream: Option<Arc<PublishedStream>>,
     setups: Vec<PendingSetup>,
     playback: Option<PlaybackSession>,
 }
@@ -108,10 +109,19 @@ impl Connection {
             control: Arc::new(Mutex::new(stream)),
             reader,
             session_id: None,
-            source: None,
+            stream: None,
             setups: Vec::new(),
             playback: None,
         }
+    }
+
+    /// Streams that exist but are off air are treated as absent, so a client
+    /// gets the same answer it would get for a name that was never published.
+    fn on_air(&self, name: &str) -> Option<Arc<PublishedStream>> {
+        self.server
+            .registry
+            .get(name)
+            .filter(|stream| stream.is_active())
     }
 
     fn serve(mut self) -> Result<()> {
@@ -157,12 +167,12 @@ impl Connection {
 
     fn describe(&mut self, request: &Request, cseq: &str) -> Response {
         let (name, _) = request.stream_and_track();
-        let Some(source) = self.server.registry.get(&name) else {
+        let Some(stream) = self.on_air(&name) else {
             return not_found(&name, &self.server.registry.names(), cseq);
         };
 
-        let body = sdp::describe(&source, self.server.config.looping).into_bytes();
-        self.source = Some(source);
+        let body = sdp::describe(&stream.source, self.server.config.looping).into_bytes();
+        self.stream = Some(stream);
 
         Response::ok(cseq)
             .header("Content-Base", format!("{}/", request.uri.trim_end_matches('/')))
@@ -177,9 +187,10 @@ impl Connection {
         }
 
         let (name, track_index) = request.stream_and_track();
-        let Some(source) = self.server.registry.get(&name) else {
+        let Some(stream) = self.on_air(&name) else {
             return not_found(&name, &self.server.registry.names(), cseq);
         };
+        let source = Arc::clone(&stream.source);
         // Without a control suffix there is nothing to bind a transport to,
         // except when the file has exactly one track.
         let track_index = match track_index.or_else(|| source.tracks.first().map(|t| t.index)) {
@@ -236,7 +247,7 @@ impl Connection {
         // clients switch transports.
         self.setups.retain(|s| s.track_index != track_index);
         self.setups.push(setup);
-        self.source = Some(source);
+        self.stream = Some(stream);
 
         let session_id = self
             .session_id
@@ -252,18 +263,23 @@ impl Connection {
     }
 
     fn play(&mut self, request: &Request, cseq: &str) -> Response {
-        let Some(source) = self.source.clone() else {
+        let Some(stream) = self.stream.clone() else {
             return Response::error(455, "Method Not Valid In This State", cseq);
         };
         if self.setups.is_empty() {
             return Response::error(455, "Method Not Valid In This State", cseq);
         }
+        // The stream may have been taken off air between SETUP and PLAY.
+        if !stream.is_active() {
+            return Response::error(404, "Not Found", cseq);
+        }
+        let source = Arc::clone(&stream.source);
         // Already playing: treat a repeat PLAY as a no-op keepalive.
         if self.playback.is_some() {
             return self.keepalive(cseq);
         }
 
-        let reader = match self.server.readers.open(&source) {
+        let reader = match self.server.readers.open(source.as_ref()) {
             Ok(reader) => reader,
             Err(e) => {
                 eprintln!("[rtsp] {}: cannot open media: {e}", self.peer);
@@ -325,7 +341,7 @@ impl Connection {
         );
 
         self.playback = Some(PlaybackSession::start(
-            Arc::clone(&source),
+            stream,
             reader,
             streams,
             Arc::new(sink),

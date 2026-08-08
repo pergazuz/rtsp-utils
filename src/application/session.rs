@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use super::registry::PublishedStream;
 use crate::domain::media::MediaSource;
 use crate::domain::ports::{Packetizer, RtcpReporter, RtpSink, SampleReader};
 
@@ -35,7 +36,7 @@ pub struct PlaybackSession {
 
 impl PlaybackSession {
     pub fn start(
-        source: Arc<MediaSource>,
+        stream: Arc<PublishedStream>,
         reader: Box<dyn SampleReader>,
         streams: Vec<TrackStream>,
         sink: Arc<dyn RtpSink>,
@@ -46,7 +47,19 @@ impl PlaybackSession {
         let worker_stop = Arc::clone(&stop);
 
         let handle = thread::spawn(move || {
-            run(source, reader, streams, sink, reporter, looping, worker_stop);
+            // Held for the life of the thread, so the viewer count falls back
+            // whether the session ends by TEARDOWN, by the stream being taken
+            // off air, or by the client vanishing.
+            let _viewer = stream.attach_viewer();
+            run(
+                &stream,
+                reader,
+                streams,
+                sink,
+                reporter,
+                looping,
+                worker_stop,
+            );
         });
 
         Self {
@@ -76,7 +89,7 @@ struct Stats {
 }
 
 fn run(
-    source: Arc<MediaSource>,
+    stream: &PublishedStream,
     mut reader: Box<dyn SampleReader>,
     mut streams: Vec<TrackStream>,
     sink: Arc<dyn RtpSink>,
@@ -84,6 +97,8 @@ fn run(
     looping: bool,
     stop: Arc<AtomicBool>,
 ) {
+    let source: &MediaSource = &stream.source;
+
     // Interleave the configured tracks into one decode-ordered timeline so the
     // audio and video packets leave in the order a receiver expects them.
     let mut timeline: Vec<(usize, usize, u128)> = Vec::new();
@@ -101,7 +116,7 @@ fn run(
         return;
     }
 
-    let total_nanos = loop_length_nanos(&source, &streams);
+    let total_nanos = loop_length_nanos(source, &streams);
     let mut stats: Vec<Stats> = streams
         .iter()
         .map(|_| Stats {
@@ -118,7 +133,9 @@ fn run(
 
     'playback: loop {
         for &(stream_pos, sample_index, dts_nanos) in &timeline {
-            if stop.load(Ordering::Relaxed) || sink.is_closed() {
+            // Taking the stream off air from the control API ends playback
+            // just as surely as a TEARDOWN does.
+            if stop.load(Ordering::Relaxed) || sink.is_closed() || !stream.is_active() {
                 break 'playback;
             }
 

@@ -1,3 +1,7 @@
 /target
 *.mov
 *.mp4
+
+# web UI
+web/node_modules
+web/dist

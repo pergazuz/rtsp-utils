@@ -2,24 +2,23 @@ use std::path::Path;
 use std::sync::Arc;
 
 use super::config::ServerConfig;
-use super::registry::StreamRegistry;
-use crate::domain::media::MediaSource;
+use super::registry::{PublishedStream, StreamRegistry};
 use crate::domain::ports::MediaProbe;
 use crate::domain::url::RtspUrl;
 use crate::domain::{Error, Result};
 
 /// Use case: take a file on disk and make it reachable at an RTSP URL.
-pub struct PublishMedia<'a> {
-    probe: &'a dyn MediaProbe,
-    registry: &'a StreamRegistry,
-    config: &'a ServerConfig,
+pub struct PublishMedia {
+    probe: Arc<dyn MediaProbe>,
+    registry: Arc<StreamRegistry>,
+    config: ServerConfig,
 }
 
-impl<'a> PublishMedia<'a> {
+impl PublishMedia {
     pub fn new(
-        probe: &'a dyn MediaProbe,
-        registry: &'a StreamRegistry,
-        config: &'a ServerConfig,
+        probe: Arc<dyn MediaProbe>,
+        registry: Arc<StreamRegistry>,
+        config: ServerConfig,
     ) -> Self {
         Self {
             probe,
@@ -28,9 +27,14 @@ impl<'a> PublishMedia<'a> {
         }
     }
 
-    /// Probes `path`, registers it under `name` (defaulting to the file stem)
-    /// and returns the URL clients should open.
-    pub fn execute(&self, path: &Path, name: Option<&str>) -> Result<(Arc<MediaSource>, RtspUrl)> {
+    /// Probes `path` and registers it under `name` (defaulting to the file
+    /// stem). `active` decides whether it goes on air immediately.
+    pub fn execute(
+        &self,
+        path: &Path,
+        name: Option<&str>,
+        active: bool,
+    ) -> Result<Arc<PublishedStream>> {
         if !path.is_file() {
             return Err(Error::NotFound(format!("{} is not a file", path.display())));
         }
@@ -41,17 +45,21 @@ impl<'a> PublishMedia<'a> {
         };
         if name.is_empty() {
             return Err(Error::Config(
-                "the stream name is empty; pass --name explicitly".into(),
+                "the stream name is empty; pass an explicit name".into(),
             ));
         }
 
         let source = self.probe.probe(path, &name)?;
-        let url = RtspUrl::new(
+        Ok(self.registry.publish(source, active))
+    }
+
+    /// The URL clients should open for a given stream name.
+    pub fn url_for(&self, name: &str) -> RtspUrl {
+        RtspUrl::new(
             self.config.advertised_host.clone(),
             self.config.port(),
             name,
-        );
-        Ok((self.registry.publish(source), url))
+        )
     }
 }
 

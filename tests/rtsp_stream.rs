@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use rtsp_utils::application::{PublishMedia, ServerConfig, StreamRegistry};
+use rtsp_utils::application::{ServerConfig, StreamControl, StreamRegistry};
 use rtsp_utils::domain::media::{CodecParams, MediaSource};
 use rtsp_utils::infrastructure::mp4::{FileSampleReaderFactory, Mp4Probe};
 use rtsp_utils::infrastructure::rtsp::RtspServer;
@@ -53,6 +53,8 @@ fn test_file() -> Option<PathBuf> {
 struct Server {
     addr: SocketAddr,
     source: Arc<MediaSource>,
+    control: Arc<StreamControl>,
+    registry: Arc<StreamRegistry>,
 }
 
 /// Publishes `path` and starts the server on an ephemeral port.
@@ -64,18 +66,35 @@ fn start_server(path: &Path) -> Server {
     };
 
     let registry = Arc::new(StreamRegistry::new());
-    let probe = Mp4Probe;
-    let publish = PublishMedia::new(&probe, registry.as_ref(), &config);
-    let (source, _url) = publish.execute(path, Some("test")).expect("probe the file");
+    let control = Arc::new(StreamControl::new(
+        Arc::new(Mp4Probe),
+        Arc::clone(&registry),
+        config.clone(),
+    ));
+    let source = Arc::clone(
+        &control
+            .add(path, Some("test"), true)
+            .expect("probe the file")
+            .source,
+    );
 
-    let server = RtspServer::bind(registry, config, Arc::new(FileSampleReaderFactory))
-        .expect("bind an ephemeral port");
+    let server = RtspServer::bind(
+        Arc::clone(&registry),
+        config,
+        Arc::new(FileSampleReaderFactory),
+    )
+    .expect("bind an ephemeral port");
     let addr = server.local_addr().expect("read the bound address");
     thread::spawn(move || {
         let _ = server.run();
     });
 
-    Server { addr, source }
+    Server {
+        addr,
+        source,
+        control,
+        registry,
+    }
 }
 
 // ---- a minimal RTSP client --------------------------------------------------
@@ -196,6 +215,30 @@ impl Client {
             headers,
             body: String::from_utf8_lossy(&body).into_owned(),
         })
+    }
+
+    /// Reads and discards whatever arrives for `window`, so packets already in
+    /// flight do not count against a later quiet check.
+    fn drain_for(&mut self, window: Duration) {
+        self.socket
+            .set_read_timeout(Some(Duration::from_millis(200)))
+            .unwrap();
+        let deadline = Instant::now() + window;
+        let mut scratch = [0u8; 4096];
+        while Instant::now() < deadline {
+            match self.reader.read(&mut scratch) {
+                Ok(0) => break,
+                Ok(_) => continue,
+                Err(_) => break,
+            }
+        }
+    }
+
+    /// True when nothing at all arrives within `window`.
+    fn is_quiet_for(&mut self, window: Duration) -> bool {
+        self.socket.set_read_timeout(Some(window)).unwrap();
+        let mut scratch = [0u8; 4096];
+        matches!(self.reader.read(&mut scratch), Err(_) | Ok(0))
     }
 
     fn setup(&mut self, track: usize, transport: &str) -> Response {
@@ -460,6 +503,70 @@ fn streams_over_udp() {
 
     assert!(stats.packets > 0, "no RTP datagrams arrived");
     assert_eq!(stats.sequence_gaps, 0, "loopback UDP should not reorder or drop");
+}
+
+/// The behaviour the web UI's Start/Stop button relies on: stopping a stream
+/// disconnects whoever is watching and hides it from new clients, and starting
+/// it again brings it back.
+#[test]
+fn stopping_a_stream_cuts_off_playback_and_hides_it() {
+    let Some(path) = test_file() else {
+        eprintln!("skipping: no test media (set RTSP_UTILS_TEST_FILE)");
+        return;
+    };
+    let server = start_server(&path);
+    let mut client = Client::connect(server.addr, "test");
+
+    client.request("DESCRIBE", &client.base.clone(), &[]);
+    client.setup(0, "RTP/AVP/TCP;unicast;interleaved=0-1");
+    assert_eq!(
+        client.request("PLAY", &client.base.clone(), &[]).status,
+        200
+    );
+
+    // Confirm media really is flowing before we try to stop it.
+    let mut media = 0;
+    while media < 5 {
+        if let Incoming::Frame(..) = client.read_incoming() {
+            media += 1;
+        }
+    }
+
+    let stream = server.registry.get("test").expect("the stream is registered");
+    assert_eq!(stream.viewers(), 1, "the playing client is counted");
+
+    server.control.stop("test").expect("stop the stream");
+
+    // Let the session notice the flag and any in-flight packets drain.
+    client.drain_for(Duration::from_millis(800));
+    assert!(
+        client.is_quiet_for(Duration::from_secs(1)),
+        "RTP kept arriving after the stream was stopped"
+    );
+
+    // The viewer count releases once the playback thread winds down.
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while stream.viewers() > 0 && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(50));
+    }
+    assert_eq!(stream.viewers(), 0, "the viewer count releases on stop");
+
+    // A stopped stream is invisible to a fresh client.
+    let mut newcomer = Client::connect(server.addr, "test");
+    assert_eq!(
+        newcomer.request("DESCRIBE", &newcomer.base.clone(), &[]).status,
+        404,
+        "a stopped stream should not be describable"
+    );
+
+    // Starting it again puts it back on air.
+    server.control.start("test").expect("start the stream");
+    let mut returning = Client::connect(server.addr, "test");
+    assert_eq!(
+        returning.request("DESCRIBE", &returning.base.clone(), &[]).status,
+        200,
+        "restarting should publish the stream again"
+    );
 }
 
 #[test]
