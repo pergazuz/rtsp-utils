@@ -1,0 +1,18 @@
+[package]
+name = "rtsp-utils"
+version = "0.1.0"
+edition = "2021"
+description = "Publish local video files as live RTSP streams"
+
+[lib]
+name = "rtsp_utils"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rtsp-utils"
+path = "src/main.rs"
+
+[dependencies]
+
+[profile.release]
+opt-level = 3
