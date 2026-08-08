@@ -5,3 +5,20 @@
 # web UI
 web/node_modules
 web/dist
+
+# Claude Code
+CLAUDE.md
+.claude/
+
+# editors
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# logs
+*.log
