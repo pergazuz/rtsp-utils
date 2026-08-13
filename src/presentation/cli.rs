@@ -9,9 +9,9 @@ use crate::infrastructure::http::{ApiServer, FileBrowser};
 use crate::infrastructure::mp4::{FileSampleReaderFactory, Mp4Probe};
 use crate::infrastructure::rtsp::RtspServer;
 
-const DEFAULT_BIND: &str = "0.0.0.0:8554";
+const DEFAULT_BIND: &str = "0.0.0.0:8555";
 const DEFAULT_HOST: &str = "127.0.0.1";
-const DEFAULT_API_BIND: &str = "127.0.0.1:8080";
+const DEFAULT_API_BIND: &str = "127.0.0.1:8556";
 /// Where `bun run build` leaves the compiled UI.
 const DEFAULT_UI_DIR: &str = "web/dist";
 
@@ -24,13 +24,13 @@ USAGE:
 
 OPTIONS:
     --name <NAME>     Stream name used in the URL path (default: the file stem)
-    --bind <ADDR>     RTSP address to listen on (default: 0.0.0.0:8554)
+    --bind <ADDR>     RTSP address to listen on (default: 0.0.0.0:8555)
     --host <HOST>     Host to advertise in the printed URL (default: 127.0.0.1)
     --no-loop         Stop at the end of the file instead of restarting it
     --stopped         Load the file but leave it off air until started
     --probe           Print the media layout and the URL, then exit
 
-    --api [ADDR]      Serve the control API and web UI (default: 127.0.0.1:8080)
+    --api [ADDR]      Serve the control API and web UI (default: 127.0.0.1:8556)
     --media-dir <DIR> Folder the web UI's file picker opens in (default: .)
     --confine-media   Restrict the picker to --media-dir instead of the whole machine
     --ui <DIR>        Directory holding the built web UI (default: web/dist)
@@ -40,8 +40,8 @@ OPTIONS:
 
 EXAMPLES:
     rtsp-utils 91.mov
-    rtsp-utils 91.mov --api                     # stream plus web UI on :8080
-    rtsp-utils --api 0.0.0.0:8080 --host 192.168.1.20
+    rtsp-utils 91.mov --api                     # stream plus web UI on :8556
+    rtsp-utils --api 0.0.0.0:8556 --host 192.168.1.20
 ";
 
 struct Args {
@@ -195,7 +195,7 @@ fn normalize_addr(value: &str, default: &str) -> Result<SocketAddr> {
     if let Ok(addr) = value.parse::<SocketAddr>() {
         return Ok(addr);
     }
-    let default_port = default.rsplit(':').next().unwrap_or("8554");
+    let default_port = default.rsplit(':').next().unwrap_or("8555");
     if let Ok(port) = value.parse::<u16>() {
         return format!("0.0.0.0:{port}")
             .parse()

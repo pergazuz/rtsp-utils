@@ -1,0 +1,93 @@
+
+mock_video.mov
+  duration  337.5s (looping)
+  video     H.264 1280x720 at 90.09 fps  [trackID=0]
+  audio     AAC 48.0 kHz mono  [trackID=1]
+
+RTSP URL:
+  rtsp://127.0.0.1:8555/mock_video
+
+Play it with:
+  ffplay -rtsp_transport tcp rtsp://127.0.0.1:8555/mock_video
+  vlc rtsp://127.0.0.1:8555/mock_video
+
+RTSP    rtsp://0.0.0.0:8555 (Ctrl-C to stop)
+
+[rtsp] 127.0.0.1:53766 connected
+[rtsp] 127.0.0.1:53766 -> DESCRIBE rtsp://127.0.0.1:8555/mock_video
+[rtsp] 127.0.0.1:53766 -> SETUP rtsp://127.0.0.1:8555/mock_video/trackID=0
+[rtsp] 127.0.0.1:53766 -> PLAY rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:53766 playing 'mock_video' (1 track(s))
+[rtsp] 127.0.0.1:53766 -> OPTIONS rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:53766 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:53766 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:53766 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:53766 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:53766 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:53766 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:53766 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:53766 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:53766 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:53766 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:53766 -> TEARDOWN rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:53766 disconnected
+[rtsp] 127.0.0.1:59566 connected
+[rtsp] 127.0.0.1:59566 -> DESCRIBE rtsp://127.0.0.1:8555/mock_video
+[rtsp] 127.0.0.1:59566 -> SETUP rtsp://127.0.0.1:8555/mock_video/trackID=0
+[rtsp] 127.0.0.1:59566 -> PLAY rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59566 playing 'mock_video' (1 track(s))
+[rtsp] 127.0.0.1:59566 -> OPTIONS rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59566 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59566 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59566 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59566 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59566 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59566 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59566 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59566 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59566 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59566 disconnected
+[rtsp] 127.0.0.1:54418 connected
+[rtsp] 127.0.0.1:54418 -> DESCRIBE rtsp://127.0.0.1:8555/mock_video
+[rtsp] 127.0.0.1:54418 -> SETUP rtsp://127.0.0.1:8555/mock_video/trackID=0
+[rtsp] 127.0.0.1:54418 -> PLAY rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:54418 playing 'mock_video' (1 track(s))
+[rtsp] 127.0.0.1:54418 -> OPTIONS rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:54418 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:54418 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:54418 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:54418 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:54418 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:54418 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:54418 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:54418 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:54418 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:54418 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:54418 -> TEARDOWN rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:54418 disconnected
+[rtsp] 127.0.0.1:59436 connected
+[rtsp] 127.0.0.1:59436 -> DESCRIBE rtsp://127.0.0.1:8555/mock_video
+[rtsp] 127.0.0.1:59436 -> SETUP rtsp://127.0.0.1:8555/mock_video/trackID=0
+[rtsp] 127.0.0.1:59436 -> PLAY rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59436 playing 'mock_video' (1 track(s))
+[rtsp] 127.0.0.1:59436 -> OPTIONS rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59436 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59436 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59436 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59436 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59436 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59436 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59436 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59436 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59436 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59436 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59436 -> TEARDOWN rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:59436 disconnected
+[rtsp] 127.0.0.1:55452 connected
+[rtsp] 127.0.0.1:55452 -> DESCRIBE rtsp://127.0.0.1:8555/mock_video
+[rtsp] 127.0.0.1:55452 -> SETUP rtsp://127.0.0.1:8555/mock_video/trackID=0
+[rtsp] 127.0.0.1:55452 -> PLAY rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:55452 playing 'mock_video' (1 track(s))
+[rtsp] 127.0.0.1:55452 -> OPTIONS rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:55452 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/
+[rtsp] 127.0.0.1:55452 -> SET_PARAMETER rtsp://127.0.0.1:8555/mock_video/

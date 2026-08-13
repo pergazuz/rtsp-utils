@@ -13,10 +13,12 @@ export default defineConfig({
   server: {
     port: 5173,
     // In development the UI runs on its own port, so control API calls are
-    // proxied through to the Rust server.
+    // proxied through to the Rust server. Must match DEFAULT_API_BIND in
+    // src/presentation/cli.rs -- deliberately not 8080, which a neighbouring
+    // service binds as a wildcard and would otherwise shadow.
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8080',
+        target: 'http://127.0.0.1:8556',
         changeOrigin: true,
       },
     },

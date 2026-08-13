@@ -184,7 +184,7 @@ mod tests {
     #[test]
     fn parses_a_request_with_headers() {
         let request = parse(
-            b"DESCRIBE rtsp://127.0.0.1:8554/91 RTSP/1.0\r\n\
+            b"DESCRIBE rtsp://127.0.0.1:8555/91 RTSP/1.0\r\n\
               CSeq: 2\r\n\
               Accept: application/sdp\r\n\r\n",
         )

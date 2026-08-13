@@ -17,7 +17,7 @@ bun run.mjs
 ```
 
 You need [Rust](https://rustup.rs) and [Bun](https://bun.sh); the launcher says
-so if either is missing. The browser opens at <http://127.0.0.1:8080>, and
+so if either is missing. The browser opens at <http://127.0.0.1:8556>, and
 Ctrl-C stops everything. Repeat runs skip the UI build unless something under
 `web/` has changed.
 
@@ -33,7 +33,7 @@ all forward to the same launcher, so the flags never change:
 | --- | --- |
 | `--file <PATH>` | Publish a video on startup |
 | `--media-dir <DIR>` | Folder the file picker opens in |
-| `--api-addr <ADDR>` | Control API address (default `127.0.0.1:8080`) |
+| `--api-addr <ADDR>` | Control API address (default `127.0.0.1:8556`) |
 | `--dev` | Vite dev server with hot reload, on port 5173 |
 | `--debug` | Build the debug profile, which compiles faster |
 | `--rebuild-ui` | Rebuild the UI even if it looks current |
@@ -83,21 +83,21 @@ mock_video.mov
   audio     AAC 48000 Hz  1 ch  15820 samples  [trackID=1]
 
 RTSP URL:
-  rtsp://127.0.0.1:8554/91
+  rtsp://127.0.0.1:8555/91
 
-Listening on rtsp://0.0.0.0:8554 (Ctrl-C to stop)
+Listening on rtsp://0.0.0.0:8555 (Ctrl-C to stop)
 ```
 
 Without `--name` the stream is named after the file, so `mock_video.mov`
-would be served at `rtsp://127.0.0.1:8554/mock_video`.
+would be served at `rtsp://127.0.0.1:8555/mock_video`.
 
 ### 3. Play it
 
 Leave the server running and open the URL in any RTSP client:
 
 ```sh
-ffplay -rtsp_transport tcp rtsp://127.0.0.1:8554/91
-vlc rtsp://127.0.0.1:8554/91
+ffplay -rtsp_transport tcp rtsp://127.0.0.1:8555/91
+vlc rtsp://127.0.0.1:8555/91
 ```
 
 If you have no player installed, VLC is the quickest to get:
@@ -114,12 +114,12 @@ end to end with the RTSP client built into the test suite.
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `--name <NAME>` | the file stem | Stream name in the URL path |
-| `--bind <ADDR>` | `0.0.0.0:8554` | RTSP address to listen on (a bare port works too) |
+| `--bind <ADDR>` | `0.0.0.0:8555` | RTSP address to listen on (a bare port works too) |
 | `--host <HOST>` | `127.0.0.1` | Host to advertise in the printed URL |
 | `--no-loop` | off | Stop at the end of the file instead of restarting |
 | `--stopped` | off | Load the file but leave it off air until started |
 | `--probe` | off | Print the media layout and URL, then exit |
-| `--api [ADDR]` | off (`127.0.0.1:8080`) | Serve the control API and web UI |
+| `--api [ADDR]` | off (`127.0.0.1:8556`) | Serve the control API and web UI |
 | `--media-dir <DIR>` | `.` | Folder the file picker opens in |
 | `--confine-media` | off | Restrict the picker to `--media-dir` instead of the whole machine |
 | `--ui <DIR>` | `web/dist` | Directory holding the built web UI |
@@ -134,7 +134,7 @@ rtsp-utils mock_video.mov --probe
 
 # reachable from other machines: advertise the address they will dial
 rtsp-utils mock_video.mov --name 91 --host 192.168.1.20
-# -> rtsp://192.168.1.20:8554/91
+# -> rtsp://192.168.1.20:8555/91
 
 # a different port, and play through once instead of looping
 rtsp-utils mock_video.mov --bind 8555 --no-loop
@@ -171,12 +171,12 @@ rtsp-utils mock_video.mov --name 91 --api
 ```
 
 ```
-RTSP    rtsp://0.0.0.0:8554 (Ctrl-C to stop)
-Web UI  http://127.0.0.1:8080
+RTSP    rtsp://0.0.0.0:8555 (Ctrl-C to stop)
+Web UI  http://127.0.0.1:8556
 ```
 
 The same binary serves the API and the built UI, so there is nothing else to
-run. Open <http://127.0.0.1:8080>.
+run. Open <http://127.0.0.1:8556>.
 
 Starting with `--api` and no file at all is fine too — the UI can find files
 itself:
@@ -244,7 +244,7 @@ bun run build    # type-check and emit web/dist
 bun run lint
 ```
 
-The dev server proxies `/api` through to `127.0.0.1:8080`, so run the backend
+The dev server proxies `/api` through to `127.0.0.1:8556`, so run the backend
 alongside it with `rtsp-utils --api --no-ui`.
 
 Stack: Bun, Vite, React 19, TypeScript, Tailwind v4, shadcn/ui and lucide
@@ -270,8 +270,8 @@ body.
 | `GET` | `/api/streams/{name}/preview.mp4` | Live fragmented MP4 of the video track |
 
 ```sh
-curl -X POST http://127.0.0.1:8080/api/streams/91/stop
-curl -X POST http://127.0.0.1:8080/api/streams \
+curl -X POST http://127.0.0.1:8556/api/streams/91/stop
+curl -X POST http://127.0.0.1:8556/api/streams \
   -H 'Content-Type: application/json' \
   -d '{"path":"mock_video.mov","name":"cam2"}'
 ```

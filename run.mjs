@@ -27,7 +27,7 @@ USAGE:
 OPTIONS:
     --file <PATH>       Publish a video on startup
     --media-dir <DIR>   Folder the file picker opens in (default: this folder)
-    --api-addr <ADDR>   Control API address (default: 127.0.0.1:8080)
+    --api-addr <ADDR>   Control API address (default: 127.0.0.1:8556)
     --dev               Vite dev server with hot reload, on port 5173
     --debug             Build the debug profile, which compiles faster
     --rebuild-ui        Rebuild the web UI even if it looks current
@@ -47,7 +47,7 @@ function parseArgs(argv) {
   const options = {
     file: null,
     mediaDir: null,
-    apiAddr: '127.0.0.1:8080',
+    apiAddr: '127.0.0.1:8556',
     dev: false,
     debug: false,
     rebuildUi: false,
