@@ -1,4 +1,4 @@
-//! Lets the UI browse video files on the server.
+//! Lets the UI browse media files on the server.
 //!
 //! By default the whole machine is reachable, which is what makes the picker
 //! useful — media rarely lives next to the binary. `confined` restores a hard
@@ -8,8 +8,9 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::domain::{Error, Result};
 
-/// Extensions offered in the picker.
-const VIDEO_EXTENSIONS: [&str; 3] = ["mov", "mp4", "m4v"];
+/// Extensions offered in the picker: the video containers, plus the still
+/// images that publish as repeating JPEG streams.
+const MEDIA_EXTENSIONS: [&str; 5] = ["mov", "mp4", "m4v", "jpg", "jpeg"];
 
 /// Ceiling on entries per listing, so a folder with tens of thousands of files
 /// cannot wedge the UI. Truncation is reported rather than hidden.
@@ -87,7 +88,7 @@ impl FileBrowser {
         }
     }
 
-    /// Lists the directories and video files inside `requested`. An empty path
+    /// Lists the directories and media files inside `requested`. An empty path
     /// means the starting folder.
     pub fn browse(&self, requested: &str) -> Result<Listing> {
         let directory = self.resolve_directory(requested)?;
@@ -113,7 +114,7 @@ impl FileBrowser {
             }
 
             let is_dir = metadata.is_dir();
-            if !is_dir && !is_video(&entry.path()) {
+            if !is_dir && !is_media(&entry.path()) {
                 continue;
             }
 
@@ -263,10 +264,10 @@ fn breadcrumbs(path: &Path) -> Vec<Segment> {
     out
 }
 
-fn is_video(path: &Path) -> bool {
+fn is_media(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
-        .map(|e| VIDEO_EXTENSIONS.contains(&e.to_ascii_lowercase().as_str()))
+        .map(|e| MEDIA_EXTENSIONS.contains(&e.to_ascii_lowercase().as_str()))
         .unwrap_or(false)
 }
 
@@ -302,12 +303,14 @@ mod tests {
     }
 
     #[test]
-    fn only_video_extensions_are_offered() {
-        assert!(is_video(Path::new("clip.mov")));
-        assert!(is_video(Path::new("clip.MP4")));
-        assert!(is_video(Path::new("clip.m4v")));
-        assert!(!is_video(Path::new("notes.txt")));
-        assert!(!is_video(Path::new("noextension")));
+    fn only_media_extensions_are_offered() {
+        assert!(is_media(Path::new("clip.mov")));
+        assert!(is_media(Path::new("clip.MP4")));
+        assert!(is_media(Path::new("clip.m4v")));
+        assert!(is_media(Path::new("photo.jpg")));
+        assert!(is_media(Path::new("photo.JPEG")));
+        assert!(!is_media(Path::new("notes.txt")));
+        assert!(!is_media(Path::new("noextension")));
     }
 
     #[test]
@@ -328,7 +331,7 @@ mod tests {
         assert!(listing
             .entries
             .iter()
-            .all(|e| e.directory || is_video(Path::new(&e.name))));
+            .all(|e| e.directory || is_media(Path::new(&e.name))));
     }
 
     #[test]

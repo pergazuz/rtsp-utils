@@ -7,6 +7,9 @@
 
 export type StreamState = 'running' | 'stopped'
 
+/** How the browser can preview a stream: MSE video, or a JPEG still. */
+export type PreviewKind = 'video' | 'image'
+
 export interface Track {
   kind: 'video' | 'audio'
   codec: string
@@ -28,6 +31,8 @@ export interface Stream {
   startedAt: number | null
   /** Whether the browser can show a live preview of this stream. */
   previewable: boolean
+  /** How to preview it, or null when the browser cannot. */
+  preview: PreviewKind | null
   tracks: Track[]
 }
 
@@ -154,7 +159,7 @@ export function removeStream(name: string): Promise<void> {
   })
 }
 
-/** Lists folders and video files inside the server's media directory. */
+/** Lists folders and media files inside the server's media directory. */
 export function listFiles(path = ''): Promise<Listing> {
   return request<Listing>(`/files?path=${encodeURIComponent(path)}`)
 }
@@ -162,4 +167,9 @@ export function listFiles(path = ''): Promise<Listing> {
 /** URL of the live fragmented-MP4 preview for a running stream. */
 export function previewUrl(name: string): string {
   return `/api/streams/${encodeURIComponent(name)}/preview.mp4`
+}
+
+/** URL of the still-image preview for a running JPEG stream. */
+export function previewImageUrl(name: string): string {
+  return `/api/streams/${encodeURIComponent(name)}/preview.jpg`
 }

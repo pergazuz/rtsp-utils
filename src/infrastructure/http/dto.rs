@@ -30,10 +30,15 @@ pub fn stream(status: &StreamStatus) -> Json {
                 None => Json::Null,
             },
         ),
-        // Whether the browser can show a live preview of this stream.
+        // Whether the browser can show a live preview of this stream, and if
+        // so how: "video" through MSE, or "image" for a JPEG still.
+        ("previewable", Json::Bool(status.preview.is_some())),
         (
-            "previewable",
-            Json::Bool(status.tracks.iter().any(|t| t.codec_string.is_some())),
+            "preview",
+            match status.preview {
+                Some(kind) => Json::string(kind),
+                None => Json::Null,
+            },
         ),
         (
             "tracks",

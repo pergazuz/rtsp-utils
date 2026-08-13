@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, MonitorPlay, TriangleAlert } from 'lucide-react'
+import { Image as ImageIcon, Loader2, MonitorPlay, TriangleAlert } from 'lucide-react'
 
-import { previewUrl, type Stream } from '@/lib/api'
+import { previewImageUrl, previewUrl, type Stream } from '@/lib/api'
 
 /**
  * How far ahead of the playhead the buffer may run before we skip forward.
@@ -18,11 +18,51 @@ interface StreamPreviewProps {
   stream: Stream
 }
 
+export function StreamPreview({ stream }: StreamPreviewProps) {
+  // A JPEG stream repeats one frame forever, so its truthful preview is the
+  // image itself rather than an MSE pipeline.
+  return stream.preview === 'image' ? (
+    <ImagePreview stream={stream} />
+  ) : (
+    <VideoPreview stream={stream} />
+  )
+}
+
+function ImagePreview({ stream }: StreamPreviewProps) {
+  const [state, setState] = useState<State>('connecting')
+
+  return (
+    <div className="relative aspect-video w-full overflow-hidden rounded-md border bg-black">
+      <img
+        src={previewImageUrl(stream.name)}
+        alt={`The still published as ${stream.name}`}
+        className="size-full object-contain"
+        onLoad={() => setState('playing')}
+        onError={() => setState('error')}
+      />
+
+      {state === 'error' && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70 text-center text-sm text-white/80">
+          <TriangleAlert className="size-5 text-amber-400" />
+          <p className="max-w-xs px-4">The image preview failed to load</p>
+        </div>
+      )}
+
+      {state === 'playing' && (
+        <div className="pointer-events-none absolute left-2 top-2 flex items-center gap-1.5 rounded bg-black/60 px-2 py-1 text-[11px] font-medium text-white">
+          <ImageIcon className="size-3" />
+          Still image · sent on repeat
+        </div>
+      )}
+    </div>
+  )
+}
+
 /**
  * Plays the server's fragmented-MP4 rendering of the stream through Media
  * Source Extensions. This is video only: it is a monitor, not a player.
  */
-export function StreamPreview({ stream }: StreamPreviewProps) {
+function VideoPreview({ stream }: StreamPreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [state, setState] = useState<State>('connecting')
   const [message, setMessage] = useState<string | null>(null)

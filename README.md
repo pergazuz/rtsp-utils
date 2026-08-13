@@ -1,11 +1,14 @@
 # rtsp-utils
 
-Turns a local video file into a live RTSP stream and prints the URL to play it.
-Comes with an optional web UI to start and stop streams.
+Turns a local video file — or a still JPEG — into a live RTSP stream and
+prints the URL to play it. Comes with an optional web UI to start and stop
+streams.
 
 The server is pure Rust with no dependencies — not even ffmpeg. The MOV/MP4
 container is parsed directly, and the H.264 and AAC samples inside are
-packetised into RTP and served over an RTSP server written from scratch.
+packetised into RTP and served over an RTSP server written from scratch. A
+JPEG is parsed the same way and repeated as an RTP/JPEG stream, so a photo
+behaves like a static camera.
 
 ## Quick start
 
@@ -90,6 +93,15 @@ Listening on rtsp://0.0.0.0:8555 (Ctrl-C to stop)
 
 Without `--name` the stream is named after the file, so `mock_video.mov`
 would be served at `rtsp://127.0.0.1:8555/mock_video`.
+
+A JPEG works the same way — `rtsp-utils photo.jpg` publishes the still as a
+looping 5 fps stream:
+
+```
+photo.jpg
+  duration  0.2s (looping)
+  video     JPEG 1706x960 still at 5 fps  [trackID=0]
+```
 
 ### 3. Play it
 
@@ -187,10 +199,10 @@ rtsp-utils --api
 
 ### Picking files
 
-**Browse for a video…** opens a picker over the whole machine: drive buttons
+**Browse for a file…** opens a picker over the whole machine: drive buttons
 along the top, clickable breadcrumbs, and folders listed ahead of files. Only
-`.mov`, `.mp4` and `.m4v` are offered, and folders with more than 1000 entries
-are truncated with a note rather than silently cut short.
+`.mov`, `.mp4`, `.m4v`, `.jpg` and `.jpeg` are offered, and folders with more
+than 1000 entries are truncated with a note rather than silently cut short.
 
 It opens in the working directory. Point it somewhere more useful with
 `--media-dir`, which sets the starting folder without restricting where you can
@@ -232,6 +244,9 @@ Two things worth knowing:
 The player chases the live edge, skipping forward if it drifts more than a
 couple of seconds behind, and evicts old buffer as it goes.
 
+A JPEG stream previews as the image itself: every RTP frame carries the same
+picture, so the honest preview is the file, not an MSE pipeline.
+
 ### Working on the UI
 
 `bun run.mjs --dev` starts the Vite dev server with hot reload on port 5173 and
@@ -266,8 +281,9 @@ body.
 | `POST` | `/api/streams/{name}/start` | Put it on air |
 | `POST` | `/api/streams/{name}/stop` | Take it off air, disconnecting clients |
 | `DELETE` | `/api/streams/{name}` | Unload it entirely |
-| `GET` | `/api/files?path=…` | Browse folders and video files; empty path means the starting folder |
+| `GET` | `/api/files?path=…` | Browse folders and media files; empty path means the starting folder |
 | `GET` | `/api/streams/{name}/preview.mp4` | Live fragmented MP4 of the video track |
+| `GET` | `/api/streams/{name}/preview.jpg` | The still image of a running JPEG stream |
 
 ```sh
 curl -X POST http://127.0.0.1:8556/api/streams/91/stop
@@ -292,6 +308,13 @@ wider, add `--confine-media` — or put it behind something that authenticates.
 - **Video**: H.264 (`avc1` / `avc3`), packetised per RFC 6184 — single NAL unit
   packets with FU-A fragmentation. SPS and PPS are repeated before every
   keyframe so clients that join mid-stream can start decoding immediately.
+- **Still images**: baseline JPEG (`.jpg` / `.jpeg`), packetised per RFC 2435
+  on static payload type 26 and repeated at 5 fps. The format reconstructs the
+  JPEG headers at the receiver, which makes its limits hard ones: at most
+  2040×2040, YCbCr 4:2:0 or 4:2:2 chroma sampling, and the standard Huffman
+  tables. Files outside them are rejected with instructions (resize with
+  `sips -Z 2040`, re-save "optimized" JPEGs with standard tables) rather than
+  streamed as garbage.
 - **Audio**: AAC (`mp4a`), packetised per RFC 3640 in `AAC-hbr` mode.
 - **Transports**: RTP over UDP, and RTP interleaved on the RTSP connection
   (`RTP/AVP/TCP`) for clients behind a firewall.
@@ -308,8 +331,11 @@ costs a few hundred kilobytes of RAM.
 
 - Seeking. `PLAY` always starts at the beginning, and `PAUSE` stops delivery
   rather than holding a position.
-- Codecs other than H.264 and AAC. Other tracks (timecode, ProRes, subtitles)
-  are skipped with a note rather than failing the whole file.
+- Codecs other than H.264, AAC and baseline JPEG. Other tracks (timecode,
+  ProRes, subtitles) are skipped with a note rather than failing the whole
+  file.
+- Progressive JPEGs, and stills larger than RFC 2435's 2040-pixel ceiling —
+  both are rejected at load with the command that fixes the file.
 - Multicast, RTSP 2.0, TLS, and authentication.
 
 ## Architecture
@@ -324,7 +350,7 @@ presentation  ->  application  ->  domain  <-  infrastructure
 | --- | --- | --- |
 | `domain` | [src/domain/](src/domain/) | Entities (`MediaSource`, `Track`, `Sample`), the `RtspUrl` value object, errors, and the ports every other layer talks through. No I/O. |
 | `application` | [src/application/](src/application/) | Use cases: publishing a file ([publish.rs](src/application/publish.rs)), the start/stop control surface ([control.rs](src/application/control.rs)), the registry of loaded streams ([registry.rs](src/application/registry.rs)), the paced RTP playback loop ([session.rs](src/application/session.rs)) and its browser-preview counterpart ([preview.rs](src/application/preview.rs)). Knows nothing about MP4 boxes, sockets, or HTTP. |
-| `infrastructure` | [src/infrastructure/](src/infrastructure/) | The concrete implementations: the container parser ([mp4/](src/infrastructure/mp4/)), the RTP payload formats ([rtp/](src/infrastructure/rtp/)), the fragmented-MP4 muxer ([fmp4/](src/infrastructure/fmp4/)), the RTSP server, SDP and transports ([rtsp/](src/infrastructure/rtsp/)), and the HTTP control API with its file browser ([http/](src/infrastructure/http/)). |
+| `infrastructure` | [src/infrastructure/](src/infrastructure/) | The concrete implementations: the container parsers ([mp4/](src/infrastructure/mp4/), [jpeg/](src/infrastructure/jpeg/)), the RTP payload formats ([rtp/](src/infrastructure/rtp/)), the fragmented-MP4 muxer ([fmp4/](src/infrastructure/fmp4/)), the RTSP server, SDP and transports ([rtsp/](src/infrastructure/rtsp/)), and the HTTP control API with its file browser ([http/](src/infrastructure/http/)). |
 | `presentation` | [src/presentation/](src/presentation/) | Argument parsing and terminal output. |
 | web UI | [web/](web/) | The React front end. Talks only to the HTTP control API. |
 
@@ -339,9 +365,9 @@ The ports are declared in [src/domain/ports.rs](src/domain/ports.rs):
 
 | Port | Implemented by |
 | --- | --- |
-| `MediaProbe` | `Mp4Probe` — reads `moov` and builds the sample tables |
+| `MediaProbe` | `AutoProbe` — sniffs the file signature and hands it to `Mp4Probe` (reads `moov` and builds the sample tables) or `JpegProbe` (reads the JPEG markers and locates the scan) |
 | `SampleReaderFactory` / `SampleReader` | `FileSampleReader` — lazy disk reads |
-| `Packetizer` | `H264Packetizer`, `AacPacketizer` |
+| `Packetizer` | `H264Packetizer`, `AacPacketizer`, `JpegPacketizer` |
 | `RtpSink` | `SessionSink` — TCP interleaved or UDP, per track |
 | `RtcpReporter` | `StandardRtcpReporter` |
 | `MediaFragmenter` | `Fmp4Fragmenter` — init segment plus `moof`/`mdat` |
@@ -360,7 +386,8 @@ cargo test
 ```
 
 Unit tests cover the sample-table reconstruction (`stsc`/`stco`/`stts`/`ctts`/
-`stss`), `avcC` and `esds` parsing, both packetizers, transport negotiation,
+`stss`), `avcC` and `esds` parsing, the JPEG marker walk with its RFC 2435
+rejections, all three packetizers, transport negotiation,
 RTSP message framing, the stream registry's start/stop and viewer accounting,
 the JSON codec, the file browser's breadcrumbs and confinement, and the
 fMP4 muxer —
@@ -382,8 +409,14 @@ Start/Stop button relies on: stopping a stream cuts off a client that is
 already playing, releases its viewer slot, and hides the stream until it is
 started again.
 
-They need a sample file, and pick up any `.mov` or `.mp4` sitting in the crate
-root on their own. To point them at one somewhere else:
+[tests/jpeg_stream.rs](tests/jpeg_stream.rs) builds a baseline JPEG in the
+test, publishes it through the same probe the binary uses, and pulls it with
+the RTSP client, checking the SDP, the RFC 2435 payload headers, that the
+fragments rebuild the original scan, and that frames repeat at 5 fps. It
+needs no sample media, so it never skips.
+
+The video tests need a sample file, and pick up any `.mov` or `.mp4` sitting
+in the crate root on their own. To point them at one somewhere else:
 
 ```sh
 RTSP_UTILS_TEST_FILE=/path/to/video.mov cargo test

@@ -50,17 +50,35 @@ pub struct AacParams {
     pub channels: u8,
 }
 
+/// Everything RTP/JPEG (RFC 2435) needs to describe a baseline JPEG frame.
+///
+/// The wire format strips the JPEG headers and has the receiver rebuild them,
+/// so the probe extracts here exactly what the payload headers must carry.
+#[derive(Debug, Clone)]
+pub struct JpegParams {
+    /// RFC 2435 type code: 0 for YCbCr 4:2:2 chroma sampling, 1 for 4:2:0.
+    pub type_code: u8,
+    pub width: u16,
+    pub height: u16,
+    /// Restart interval from the DRI segment; zero when there is none.
+    pub restart_interval: u16,
+    /// Quantization tables in zigzag order: luma first, then chroma when the
+    /// scan uses two distinct tables (64 or 128 bytes).
+    pub quant_tables: Vec<u8>,
+}
+
 #[derive(Debug, Clone)]
 pub enum CodecParams {
     H264(H264Params),
     Aac(AacParams),
+    Jpeg(JpegParams),
 }
 
 impl CodecParams {
     /// RTP clock rate for this payload, in Hz.
     pub fn clock_rate(&self) -> u32 {
         match self {
-            CodecParams::H264(_) => 90_000,
+            CodecParams::H264(_) | CodecParams::Jpeg(_) => 90_000,
             CodecParams::Aac(a) => a.sample_rate,
         }
     }
@@ -69,6 +87,7 @@ impl CodecParams {
         match self {
             CodecParams::H264(_) => "H264",
             CodecParams::Aac(_) => "mpeg4-generic",
+            CodecParams::Jpeg(_) => "JPEG",
         }
     }
 }

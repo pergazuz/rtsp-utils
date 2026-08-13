@@ -165,7 +165,7 @@ export function StreamCard({ stream, onUpdated, onRemoved }: StreamCardProps) {
             title={
               stream.previewable
                 ? undefined
-                : 'This stream has no H.264 video to preview'
+                : 'This stream has nothing the browser can preview'
             }
           >
             {showPreview ? <EyeOff /> : <Eye />}

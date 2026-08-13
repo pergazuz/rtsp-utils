@@ -7,6 +7,7 @@ import {
   FolderOpen,
   HardDrive,
   Home,
+  Image as ImageIcon,
   Loader2,
   TriangleAlert,
 } from 'lucide-react'
@@ -66,7 +67,7 @@ export function FilePicker({ onPick, children }: FilePickerProps) {
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Choose a video</DialogTitle>
+          <DialogTitle>Choose a file</DialogTitle>
           <DialogDescription>
             Files on the machine running rtsp-utils.
           </DialogDescription>
@@ -139,7 +140,7 @@ export function FilePicker({ onPick, children }: FilePickerProps) {
                 ) : (
                   <EntryRow
                     key={entry.path}
-                    icon={Film}
+                    icon={/\.jpe?g$/i.test(entry.name) ? ImageIcon : Film}
                     label={entry.name}
                     trailing={
                       <span className="text-xs tabular-nums text-muted-foreground">
@@ -155,7 +156,7 @@ export function FilePicker({ onPick, children }: FilePickerProps) {
                 <li className="flex flex-col items-center gap-2 py-16 text-center">
                   <FolderOpen className="size-5 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground">
-                    No folders or video files here
+                    No folders or media files here
                   </p>
                 </li>
               )}
@@ -166,7 +167,7 @@ export function FilePicker({ onPick, children }: FilePickerProps) {
         <p className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
           {listing?.truncated
             ? 'Showing the first 1000 entries in this folder.'
-            : 'Only .mov, .mp4 and .m4v files are listed.'}
+            : 'Only .mov, .mp4, .m4v, .jpg and .jpeg files are listed.'}
         </p>
       </DialogContent>
     </Dialog>

@@ -1,6 +1,7 @@
 /target
 *.mov
 *.mp4
+*.jpg
 
 # web UI
 web/node_modules

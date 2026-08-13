@@ -2,7 +2,7 @@
 name = "rtsp-utils"
 version = "0.1.0"
 edition = "2021"
-description = "Publish local video files as live RTSP streams"
+description = "Publish local video and JPEG files as live RTSP streams"
 
 [lib]
 name = "rtsp_utils"
