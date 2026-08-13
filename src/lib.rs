@@ -1,4 +1,4 @@
-//! rtsp-utils — publish local video files as live RTSP streams.
+//! rtsp-utils — publish local video or JPEG files as live RTSP streams.
 //!
 //! Layers (dependencies only ever point inwards):
 //!   presentation -> application -> domain

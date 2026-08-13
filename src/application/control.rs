@@ -22,6 +22,7 @@ pub struct StreamStatus {
     pub duration_secs: f64,
     pub viewers: usize,
     pub started_at: Option<SystemTime>,
+    pub preview: Option<&'static str>,
     pub tracks: Vec<TrackStatus>,
 }
 
@@ -125,9 +126,18 @@ impl StreamControl {
             duration_secs: source.duration_secs,
             viewers: stream.viewers(),
             started_at: stream.started_at(),
+            preview: preview_kind(source),
             tracks: describe_tracks(source),
         }
     }
+}
+
+fn preview_kind(source: &MediaSource) -> Option<&'static str> {
+    source.tracks.iter().find_map(|t| match &t.codec {
+        CodecParams::H264(_) => Some("video"),
+        CodecParams::Jpeg(_) => Some("image"),
+        CodecParams::Aac(_) => None,
+    })
 }
 
 fn describe_tracks(source: &MediaSource) -> Vec<TrackStatus> {
@@ -137,18 +147,19 @@ fn describe_tracks(source: &MediaSource) -> Vec<TrackStatus> {
         .map(|track| {
             let codec_string = match &track.codec {
                 CodecParams::H264(p) => Some(p.codec_string()),
-                // AAC is not carried in the browser preview, which is video
-                // only, so it has no codec string to advertise.
-                CodecParams::Aac(_) => None,
+                // Neither goes through the MSE preview: AAC is not carried
+                // at all, and JPEG previews as a still image instead.
+                CodecParams::Aac(_) | CodecParams::Jpeg(_) => None,
+            };
+
+            let fps = if track.duration_secs() > 0.0 {
+                track.samples.len() as f64 / track.duration_secs()
+            } else {
+                0.0
             };
 
             let (codec, detail) = match &track.codec {
                 CodecParams::H264(p) => {
-                    let fps = if track.duration_secs() > 0.0 {
-                        track.samples.len() as f64 / track.duration_secs()
-                    } else {
-                        0.0
-                    };
                     // Plain ASCII: this string goes to a Windows console as
                     // well as to the browser, and consoles mangle punctuation
                     // outside their code page.
@@ -164,6 +175,10 @@ fn describe_tracks(source: &MediaSource) -> Vec<TrackStatus> {
                         p.sample_rate as f64 / 1000.0,
                         if p.channels == 1 { "mono" } else { "stereo" }
                     ),
+                ),
+                CodecParams::Jpeg(p) => (
+                    "JPEG".to_string(),
+                    format!("{}x{} still at {fps:.0} fps", p.width, p.height),
                 ),
             };
 

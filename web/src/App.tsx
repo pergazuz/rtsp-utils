@@ -87,7 +87,7 @@ function EmptyState() {
         <div className="space-y-1">
           <p className="font-medium">No streams yet</p>
           <p className="text-sm text-muted-foreground">
-            Add a video file above and it will be published over RTSP.
+            Add a video or JPEG file above and it will be published over RTSP.
           </p>
         </div>
       </CardContent>

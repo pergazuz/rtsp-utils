@@ -1,7 +1,7 @@
 //! Session description generation for DESCRIBE (RFC 4566, plus the payload
-//! specific attributes from RFC 6184 and RFC 3640).
+//! specific attributes from RFC 6184, RFC 3640 and RFC 2435).
 
-use crate::domain::media::{AacParams, CodecParams, H264Params, MediaSource};
+use crate::domain::media::{AacParams, CodecParams, H264Params, JpegParams, MediaSource};
 use crate::infrastructure::rtp::payload_type_for;
 
 /// Builds the SDP body advertised for a source.
@@ -32,9 +32,10 @@ pub fn describe(source: &MediaSource, looping: bool) -> String {
         sdp.push_str("c=IN IP4 0.0.0.0\r\n");
 
         // rtpmap is `encoding/clock` for video and `encoding/clock/channels`
-        // for audio.
+        // for audio. JPEG's is redundant (payload type 26 is static) but
+        // spelling it out costs nothing and helps a reader of the SDP.
         match &track.codec {
-            CodecParams::H264(_) => sdp.push_str(&format!(
+            CodecParams::H264(_) | CodecParams::Jpeg(_) => sdp.push_str(&format!(
                 "a=rtpmap:{pt} {}/{}\r\n",
                 track.codec.encoding_name(),
                 track.codec.clock_rate()
@@ -50,6 +51,7 @@ pub fn describe(source: &MediaSource, looping: bool) -> String {
         match &track.codec {
             CodecParams::H264(params) => describe_h264(&mut sdp, pt, params),
             CodecParams::Aac(params) => describe_aac(&mut sdp, pt, params),
+            CodecParams::Jpeg(params) => describe_jpeg(&mut sdp, params),
         }
 
         sdp.push_str(&format!("a=control:{}\r\n", track.control()));
@@ -73,6 +75,15 @@ fn describe_h264(sdp: &mut String, pt: u8, params: &H264Params) {
         base64(&params.sps),
         base64(&params.pps),
     ));
+    sdp.push_str(&format!(
+        "a=x-dimensions:{},{}\r\n",
+        params.width, params.height
+    ));
+}
+
+fn describe_jpeg(sdp: &mut String, params: &JpegParams) {
+    // RFC 2435 needs no fmtp line: everything a receiver must know travels
+    // in the RTP payload headers themselves.
     sdp.push_str(&format!(
         "a=x-dimensions:{},{}\r\n",
         params.width, params.height

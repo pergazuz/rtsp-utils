@@ -44,7 +44,7 @@ export function AddStreamForm({ onAdded }: AddStreamFormProps) {
       <CardContent>
         <form onSubmit={submit} className="flex flex-col gap-4 sm:flex-row sm:items-end">
           <div className="min-w-0 flex-1 space-y-2">
-            <Label>Video file</Label>
+            <Label>Video or image file</Label>
             {path ? (
               <SelectedFile path={path} onClear={() => setPath('')} />
             ) : (
@@ -55,7 +55,7 @@ export function AddStreamForm({ onAdded }: AddStreamFormProps) {
                   className="w-full justify-start font-normal text-muted-foreground"
                 >
                   <FolderOpen />
-                  Browse for a video…
+                  Browse for a file…
                 </Button>
               </FilePicker>
             )}

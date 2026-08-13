@@ -1,5 +1,6 @@
 pub mod aac;
 pub mod h264;
+pub mod jpeg;
 pub mod packet;
 
 use crate::domain::media::{CodecParams, Track};
@@ -9,7 +10,11 @@ use crate::domain::ports::{Packetizer, RtcpReporter};
 pub const FIRST_DYNAMIC_PAYLOAD_TYPE: u8 = 96;
 
 pub fn payload_type_for(track: &Track) -> u8 {
-    FIRST_DYNAMIC_PAYLOAD_TYPE + track.index as u8
+    match &track.codec {
+        // JPEG has held a static payload type since RFC 3551.
+        CodecParams::Jpeg(_) => jpeg::PAYLOAD_TYPE,
+        _ => FIRST_DYNAMIC_PAYLOAD_TYPE + track.index as u8,
+    }
 }
 
 /// Builds the packetizer that matches a track's codec.
@@ -27,6 +32,12 @@ pub fn packetizer_for(track: &Track) -> Box<dyn Packetizer> {
         )),
         CodecParams::Aac(params) => Box::new(aac::AacPacketizer::new(
             params,
+            payload_type,
+            ssrc,
+            initial_seq,
+        )),
+        CodecParams::Jpeg(params) => Box::new(jpeg::JpegPacketizer::new(
+            params.clone(),
             payload_type,
             ssrc,
             initial_seq,

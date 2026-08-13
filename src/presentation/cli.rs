@@ -6,7 +6,8 @@ use std::thread;
 use crate::application::{ServerConfig, StreamControl, StreamRegistry, StreamStatus};
 use crate::domain::{Error, Result};
 use crate::infrastructure::http::{ApiServer, FileBrowser};
-use crate::infrastructure::mp4::{FileSampleReaderFactory, Mp4Probe};
+use crate::infrastructure::mp4::FileSampleReaderFactory;
+use crate::infrastructure::probe::AutoProbe;
 use crate::infrastructure::rtsp::RtspServer;
 
 const DEFAULT_BIND: &str = "0.0.0.0:8554";
@@ -16,7 +17,7 @@ const DEFAULT_API_BIND: &str = "127.0.0.1:8080";
 const DEFAULT_UI_DIR: &str = "web/dist";
 
 const USAGE: &str = "\
-rtsp-utils — publish local video files as live RTSP streams
+rtsp-utils — publish local video or JPEG files as live RTSP streams
 
 USAGE:
     rtsp-utils <FILE> [OPTIONS]
@@ -40,6 +41,7 @@ OPTIONS:
 
 EXAMPLES:
     rtsp-utils 91.mov
+    rtsp-utils photo.jpg                        # a still, repeated as live video
     rtsp-utils 91.mov --api                     # stream plus web UI on :8080
     rtsp-utils --api 0.0.0.0:8080 --host 192.168.1.20
 ";
@@ -215,7 +217,7 @@ fn serve(args: Args) -> Result<()> {
 
     let registry = Arc::new(StreamRegistry::new());
     let control = Arc::new(StreamControl::new(
-        Arc::new(Mp4Probe),
+        Arc::new(AutoProbe),
         Arc::clone(&registry),
         config.clone(),
     ));

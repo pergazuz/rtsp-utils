@@ -83,11 +83,18 @@ impl ApiServer {
             return Ok(());
         };
 
-        // The preview is an open-ended response, so it takes over the socket
-        // instead of going through the request/response path.
         if request.method == "GET" {
-            if let Some(name) = preview_target(&request.path) {
-                return self.stream_preview(&name, writer);
+            match preview_target(&request.path) {
+                // The video preview is an open-ended response, so it takes
+                // over the socket instead of going through request/response.
+                Some((name, PreviewKind::Video)) => return self.stream_preview(&name, writer),
+                Some((name, PreviewKind::Image)) => {
+                    let response = self.image_preview(&name);
+                    writer.write_all(&response.to_bytes())?;
+                    writer.flush()?;
+                    return Ok(());
+                }
+                None => {}
             }
         }
 
@@ -236,6 +243,31 @@ impl ApiServer {
         Ok(())
     }
 
+    /// One frame of a JPEG stream, which is every frame: the browser gets the
+    /// original file, since RTP resends the same image over and over.
+    fn image_preview(&self, name: &str) -> Response {
+        let Some(stream) = self.control.stream(name).filter(|s| s.is_active()) else {
+            return Response::json(
+                404,
+                &dto::error("no stream by that name is currently running"),
+            );
+        };
+
+        let is_jpeg = stream
+            .source
+            .tracks
+            .iter()
+            .any(|t| matches!(t.codec, CodecParams::Jpeg(_)));
+        if !is_jpeg {
+            return Response::json(415, &dto::error("this stream is not a still image"));
+        }
+
+        match std::fs::read(&stream.source.path) {
+            Ok(bytes) => Response::bytes(200, "image/jpeg", bytes),
+            Err(e) => Response::json(500, &dto::error(&format!("cannot read the image: {e}"))),
+        }
+    }
+
     /// Serves the built UI, falling back to `index.html` so client-side routes
     /// survive a page reload.
     fn serve_ui(&self, path: &str) -> Response {
@@ -299,14 +331,26 @@ impl ByteSink for ChunkedSink {
     }
 }
 
-/// Matches `/api/streams/{name}/preview.mp4` and returns the decoded name.
-fn preview_target(path: &str) -> Option<String> {
+enum PreviewKind {
+    Video,
+    Image,
+}
+
+/// Matches `/api/streams/{name}/preview.mp4` or `.../preview.jpg` and returns
+/// the decoded name with the kind of preview asked for.
+fn preview_target(path: &str) -> Option<(String, PreviewKind)> {
     let rest = path.strip_prefix("/api/streams/")?;
-    let name = rest.strip_suffix("/preview.mp4")?;
+    let (name, kind) = if let Some(name) = rest.strip_suffix("/preview.mp4") {
+        (name, PreviewKind::Video)
+    } else if let Some(name) = rest.strip_suffix("/preview.jpg") {
+        (name, PreviewKind::Image)
+    } else {
+        return None;
+    };
     if name.is_empty() || name.contains('/') {
         return None;
     }
-    Some(percent_decode(name))
+    Some((percent_decode(name), kind))
 }
 
 /// Joins a request path onto the UI root, refusing anything that would escape
@@ -463,6 +507,7 @@ impl Response {
             204 => "No Content",
             400 => "Bad Request",
             404 => "Not Found",
+            415 => "Unsupported Media Type",
             422 => "Unprocessable Entity",
             _ => "Internal Server Error",
         };
