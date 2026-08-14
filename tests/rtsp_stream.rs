@@ -331,13 +331,23 @@ fn describes_and_streams_over_tcp_interleaved() {
         "DESCRIBE must return SDP"
     );
 
+    let video_is_h265 = matches!(server.source.tracks[0].codec, CodecParams::H265(_));
+
     let sdp = &response.body;
     assert!(sdp.contains("m=video 0 RTP/AVP 96"), "SDP video line:\n{sdp}");
-    assert!(sdp.contains("a=rtpmap:96 H264/90000"), "SDP rtpmap:\n{sdp}");
-    assert!(
-        sdp.contains("packetization-mode=1") && sdp.contains("sprop-parameter-sets="),
-        "SDP must carry H.264 setup:\n{sdp}"
-    );
+    if video_is_h265 {
+        assert!(sdp.contains("a=rtpmap:96 H265/90000"), "SDP rtpmap:\n{sdp}");
+        assert!(
+            sdp.contains("sprop-vps=") && sdp.contains("sprop-sps=") && sdp.contains("sprop-pps="),
+            "SDP must carry H.265 setup:\n{sdp}"
+        );
+    } else {
+        assert!(sdp.contains("a=rtpmap:96 H264/90000"), "SDP rtpmap:\n{sdp}");
+        assert!(
+            sdp.contains("packetization-mode=1") && sdp.contains("sprop-parameter-sets="),
+            "SDP must carry H.264 setup:\n{sdp}"
+        );
+    }
     assert!(sdp.contains("a=control:trackID=0"), "SDP control URL:\n{sdp}");
 
     let has_audio = server
@@ -382,9 +392,17 @@ fn describes_and_streams_over_tcp_interleaved() {
                 0 => {
                     let rtp = parse_rtp(&data);
                     assert_eq!(rtp.payload_type, 96, "video payload type");
-                    let nal_type = data[12] & 0x1f;
-                    video.saw_sps |= nal_type == 7;
-                    video.saw_pps |= nal_type == 8;
+                    // The NAL header layouts differ: H.264 puts the type in
+                    // the low five bits, H.265 in bits 6..1.
+                    if video_is_h265 {
+                        let nal_type = (data[12] >> 1) & 0x3f;
+                        video.saw_sps |= nal_type == 33;
+                        video.saw_pps |= nal_type == 34;
+                    } else {
+                        let nal_type = data[12] & 0x1f;
+                        video.saw_sps |= nal_type == 7;
+                        video.saw_pps |= nal_type == 8;
+                    }
                     video.record(&rtp);
                 }
                 2 => {

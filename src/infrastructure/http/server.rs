@@ -15,7 +15,7 @@ use crate::application::{preview, StreamControl};
 use crate::domain::media::CodecParams;
 use crate::domain::ports::{ByteSink, SampleReaderFactory};
 use crate::domain::{Error, Result};
-use crate::infrastructure::fmp4::Fmp4Fragmenter;
+use crate::infrastructure::fmp4::{Fmp4Fragmenter, VideoParams};
 
 /// Refuse absurd request bodies rather than allocating whatever is asked for.
 const MAX_BODY: usize = 1 << 20;
@@ -205,12 +205,13 @@ impl ApiServer {
         };
 
         let Some((params, timescale)) = stream.source.tracks.iter().find_map(|t| match &t.codec {
-            CodecParams::H264(p) => Some((p.clone(), t.timescale)),
+            CodecParams::H264(p) => Some((VideoParams::H264(p.clone()), t.timescale)),
+            CodecParams::H265(p) => Some((VideoParams::H265(p.clone()), t.timescale)),
             _ => None,
         }) else {
             let response = Response::json(
                 415,
-                &dto::error("this stream has no H.264 video to preview"),
+                &dto::error("this stream has no H.264 or H.265 video to preview"),
             );
             writer.write_all(&response.to_bytes())?;
             return Ok(());

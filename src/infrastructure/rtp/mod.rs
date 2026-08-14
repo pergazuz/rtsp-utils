@@ -1,5 +1,6 @@
 pub mod aac;
 pub mod h264;
+pub mod h265;
 pub mod jpeg;
 pub mod packet;
 
@@ -25,6 +26,12 @@ pub fn packetizer_for(track: &Track) -> Box<dyn Packetizer> {
 
     match &track.codec {
         CodecParams::H264(params) => Box::new(h264::H264Packetizer::new(
+            params.clone(),
+            payload_type,
+            ssrc,
+            initial_seq,
+        )),
+        CodecParams::H265(params) => Box::new(h265::H265Packetizer::new(
             params.clone(),
             payload_type,
             ssrc,

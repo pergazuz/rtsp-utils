@@ -1,7 +1,9 @@
 //! Session description generation for DESCRIBE (RFC 4566, plus the payload
-//! specific attributes from RFC 6184, RFC 3640 and RFC 2435).
+//! specific attributes from RFC 6184, RFC 7798, RFC 3640 and RFC 2435).
 
-use crate::domain::media::{AacParams, CodecParams, H264Params, JpegParams, MediaSource};
+use crate::domain::media::{
+    AacParams, CodecParams, H264Params, H265Params, JpegParams, MediaSource,
+};
 use crate::infrastructure::rtp::payload_type_for;
 
 /// Builds the SDP body advertised for a source.
@@ -35,11 +37,13 @@ pub fn describe(source: &MediaSource, looping: bool) -> String {
         // for audio. JPEG's is redundant (payload type 26 is static) but
         // spelling it out costs nothing and helps a reader of the SDP.
         match &track.codec {
-            CodecParams::H264(_) | CodecParams::Jpeg(_) => sdp.push_str(&format!(
-                "a=rtpmap:{pt} {}/{}\r\n",
-                track.codec.encoding_name(),
-                track.codec.clock_rate()
-            )),
+            CodecParams::H264(_) | CodecParams::H265(_) | CodecParams::Jpeg(_) => {
+                sdp.push_str(&format!(
+                    "a=rtpmap:{pt} {}/{}\r\n",
+                    track.codec.encoding_name(),
+                    track.codec.clock_rate()
+                ))
+            }
             CodecParams::Aac(params) => sdp.push_str(&format!(
                 "a=rtpmap:{pt} {}/{}/{}\r\n",
                 track.codec.encoding_name(),
@@ -50,6 +54,7 @@ pub fn describe(source: &MediaSource, looping: bool) -> String {
 
         match &track.codec {
             CodecParams::H264(params) => describe_h264(&mut sdp, pt, params),
+            CodecParams::H265(params) => describe_h265(&mut sdp, pt, params),
             CodecParams::Aac(params) => describe_aac(&mut sdp, pt, params),
             CodecParams::Jpeg(params) => describe_jpeg(&mut sdp, params),
         }
@@ -72,6 +77,21 @@ fn describe_h264(sdp: &mut String, pt: u8, params: &H264Params) {
     sdp.push_str(&format!(
         "a=fmtp:{pt} packetization-mode=1;profile-level-id={};sprop-parameter-sets={},{}\r\n",
         profile_level_id,
+        base64(&params.sps),
+        base64(&params.pps),
+    ));
+    sdp.push_str(&format!(
+        "a=x-dimensions:{},{}\r\n",
+        params.width, params.height
+    ));
+}
+
+fn describe_h265(sdp: &mut String, pt: u8, params: &H265Params) {
+    // RFC 7798 carries each parameter set in its own sprop attribute rather
+    // than H.264's single comma-separated list.
+    sdp.push_str(&format!(
+        "a=fmtp:{pt} sprop-vps={};sprop-sps={};sprop-pps={}\r\n",
+        base64(&params.vps),
         base64(&params.sps),
         base64(&params.pps),
     ));

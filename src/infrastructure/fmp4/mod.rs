@@ -1,17 +1,39 @@
 //! Fragmented MP4 muxing (ISO/IEC 14496-12), so a browser can play the same
-//! H.264 samples the RTSP side sends.
+//! H.264 or H.265 samples the RTSP side sends.
 //!
-//! Nothing is transcoded. The container already stores AVCC-formatted samples,
-//! which is exactly what an fMP4 `mdat` wants, so the sample bytes are copied
-//! through untouched and only the boxes around them are new.
+//! Nothing is transcoded. The container already stores length-prefixed
+//! samples, which is exactly what an fMP4 `mdat` wants, so the sample bytes
+//! are copied through untouched and only the boxes around them are new.
 
 mod boxes;
 
 use boxes::*;
 
-use crate::domain::media::H264Params;
+use crate::domain::media::{H264Params, H265Params};
 use crate::domain::ports::{FragmentSample, MediaFragmenter};
 use crate::domain::Result;
+
+/// The video codecs the fragmenter can wrap.
+pub enum VideoParams {
+    H264(H264Params),
+    H265(H265Params),
+}
+
+impl VideoParams {
+    pub fn width(&self) -> u16 {
+        match self {
+            VideoParams::H264(p) => p.width,
+            VideoParams::H265(p) => p.width,
+        }
+    }
+
+    pub fn height(&self) -> u16 {
+        match self {
+            VideoParams::H264(p) => p.height,
+            VideoParams::H265(p) => p.height,
+        }
+    }
+}
 
 /// Video track id inside the generated file. There is only ever one.
 const TRACK_ID: u32 = 1;
@@ -24,7 +46,7 @@ struct PendingSample {
 }
 
 pub struct Fmp4Fragmenter {
-    params: H264Params,
+    params: VideoParams,
     timescale: u32,
     sequence: u32,
     /// Decode time of the next fragment, in `timescale` units.
@@ -34,7 +56,7 @@ pub struct Fmp4Fragmenter {
 }
 
 impl Fmp4Fragmenter {
-    pub fn new(params: H264Params, timescale: u32) -> Self {
+    pub fn new(params: VideoParams, timescale: u32) -> Self {
         Self {
             params,
             timescale: timescale.max(1),

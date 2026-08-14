@@ -5,7 +5,7 @@ prints the URL to play it. Comes with an optional web UI to start and stop
 streams.
 
 The server is pure Rust with no dependencies — not even ffmpeg. The MOV/MP4
-container is parsed directly, and the H.264 and AAC samples inside are
+container is parsed directly, and the H.264, H.265 and AAC samples inside are
 packetised into RTP and served over an RTSP server written from scratch. A
 JPEG is parsed the same way and repeated as an RTP/JPEG stream, so a photo
 behaves like a static camera.
@@ -222,14 +222,17 @@ rtsp-utils --api --media-dir D:\recordings --confine-media
 ### Live preview
 
 **Watch** on a running stream plays it in the page. Since no browser speaks
-RTSP, the server repackages the same H.264 samples into fragmented MP4 and
-streams them over a chunked HTTP response, which the page feeds to a
+RTSP, the server repackages the same H.264 or H.265 samples into fragmented
+MP4 and streams them over a chunked HTTP response, which the page feeds to a
 `SourceBuffer` through Media Source Extensions.
 
-Nothing is transcoded — the container already stores AVCC-formatted samples,
+Nothing is transcoded — the container already stores length-prefixed samples,
 which is exactly what an fMP4 `mdat` wants, so the bytes are copied through and
 only the boxes around them are new. That keeps the preview honest: it is the
-same coded video an RTSP client receives, not a re-encoding of it.
+same coded video an RTSP client receives, not a re-encoding of it. One
+consequence: an H.265 preview only plays in browsers that can decode HEVC at
+all (Safari, and Chrome or Edge with hardware support); the page says so
+plainly when the browser cannot.
 
 Two things worth knowing:
 
@@ -308,6 +311,10 @@ wider, add `--confine-media` — or put it behind something that authenticates.
 - **Video**: H.264 (`avc1` / `avc3`), packetised per RFC 6184 — single NAL unit
   packets with FU-A fragmentation. SPS and PPS are repeated before every
   keyframe so clients that join mid-stream can start decoding immediately.
+  H.265/HEVC (`hvc1` / `hev1`), packetised per RFC 7798 the same way — single
+  NAL unit packets with FU fragmentation, VPS/SPS/PPS repeated before every
+  keyframe. The parameter sets must be in the container's `hvcC` record;
+  in-band-only files are rejected.
 - **Still images**: baseline JPEG (`.jpg` / `.jpeg`), packetised per RFC 2435
   on static payload type 26 and repeated at 5 fps. The format reconstructs the
   JPEG headers at the receiver, which makes its limits hard ones: at most
@@ -331,9 +338,9 @@ costs a few hundred kilobytes of RAM.
 
 - Seeking. `PLAY` always starts at the beginning, and `PAUSE` stops delivery
   rather than holding a position.
-- Codecs other than H.264, AAC and baseline JPEG. Other tracks (timecode,
-  ProRes, subtitles) are skipped with a note rather than failing the whole
-  file.
+- Codecs other than H.264, H.265, AAC and baseline JPEG. Other tracks
+  (timecode, ProRes, subtitles) are skipped with a note rather than failing
+  the whole file.
 - Progressive JPEGs, and stills larger than RFC 2435's 2040-pixel ceiling —
   both are rejected at load with the command that fixes the file.
 - Multicast, RTSP 2.0, TLS, and authentication.
@@ -367,7 +374,7 @@ The ports are declared in [src/domain/ports.rs](src/domain/ports.rs):
 | --- | --- |
 | `MediaProbe` | `AutoProbe` — sniffs the file signature and hands it to `Mp4Probe` (reads `moov` and builds the sample tables) or `JpegProbe` (reads the JPEG markers and locates the scan) |
 | `SampleReaderFactory` / `SampleReader` | `FileSampleReader` — lazy disk reads |
-| `Packetizer` | `H264Packetizer`, `AacPacketizer`, `JpegPacketizer` |
+| `Packetizer` | `H264Packetizer`, `H265Packetizer`, `AacPacketizer`, `JpegPacketizer` |
 | `RtpSink` | `SessionSink` — TCP interleaved or UDP, per track |
 | `RtcpReporter` | `StandardRtcpReporter` |
 | `MediaFragmenter` | `Fmp4Fragmenter` — init segment plus `moof`/`mdat` |

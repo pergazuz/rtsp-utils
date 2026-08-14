@@ -1,6 +1,7 @@
 //! Box construction for fragmented MP4.
 
-use crate::domain::media::H264Params;
+use super::VideoParams;
+use crate::domain::media::{H264Params, H265Params};
 
 /// Wraps a payload in a box header.
 fn bx(kind: &[u8; 4], body: &[u8]) -> Vec<u8> {
@@ -37,7 +38,7 @@ pub fn ftyp() -> Vec<u8> {
 
 /// The initialisation segment's movie box. Durations are zero because the
 /// stream is open-ended.
-pub fn moov(params: &H264Params, timescale: u32, track_id: u32) -> Vec<u8> {
+pub fn moov(params: &VideoParams, timescale: u32, track_id: u32) -> Vec<u8> {
     let mut body = mvhd(track_id);
     body.extend_from_slice(&trak(params, timescale, track_id));
     body.extend_from_slice(&mvex(track_id));
@@ -60,13 +61,13 @@ fn mvhd(track_id: u32) -> Vec<u8> {
     full_bx(b"mvhd", 0, 0, &body)
 }
 
-fn trak(params: &H264Params, timescale: u32, track_id: u32) -> Vec<u8> {
+fn trak(params: &VideoParams, timescale: u32, track_id: u32) -> Vec<u8> {
     let mut body = tkhd(params, track_id);
     body.extend_from_slice(&mdia(params, timescale));
     bx(b"trak", &body)
 }
 
-fn tkhd(params: &H264Params, track_id: u32) -> Vec<u8> {
+fn tkhd(params: &VideoParams, track_id: u32) -> Vec<u8> {
     let mut body = Vec::new();
     body.extend_from_slice(&0u32.to_be_bytes()); // creation
     body.extend_from_slice(&0u32.to_be_bytes()); // modification
@@ -80,13 +81,13 @@ fn tkhd(params: &H264Params, track_id: u32) -> Vec<u8> {
     body.extend_from_slice(&[0; 2]); // reserved
     body.extend_from_slice(&UNITY_MATRIX);
     // Dimensions here are 16.16 fixed point.
-    body.extend_from_slice(&((params.width as u32) << 16).to_be_bytes());
-    body.extend_from_slice(&((params.height as u32) << 16).to_be_bytes());
+    body.extend_from_slice(&((params.width() as u32) << 16).to_be_bytes());
+    body.extend_from_slice(&((params.height() as u32) << 16).to_be_bytes());
     // flags 3 = track_enabled | track_in_movie
     full_bx(b"tkhd", 0, 3, &body)
 }
 
-fn mdia(params: &H264Params, timescale: u32) -> Vec<u8> {
+fn mdia(params: &VideoParams, timescale: u32) -> Vec<u8> {
     let mut body = mdhd(timescale);
     body.extend_from_slice(&hdlr());
     body.extend_from_slice(&minf(params));
@@ -113,7 +114,7 @@ fn hdlr() -> Vec<u8> {
     full_bx(b"hdlr", 0, 0, &body)
 }
 
-fn minf(params: &H264Params) -> Vec<u8> {
+fn minf(params: &VideoParams) -> Vec<u8> {
     let mut body = vmhd();
     body.extend_from_slice(&dinf());
     body.extend_from_slice(&stbl(params));
@@ -136,9 +137,9 @@ fn dinf() -> Vec<u8> {
 }
 
 /// The sample tables are empty: a fragmented file carries timing in `trun`.
-fn stbl(params: &H264Params) -> Vec<u8> {
+fn stbl(params: &VideoParams) -> Vec<u8> {
     let mut stsd_body = 1u32.to_be_bytes().to_vec();
-    stsd_body.extend_from_slice(&avc1(params));
+    stsd_body.extend_from_slice(&sample_entry(params));
 
     let mut body = full_bx(b"stsd", 0, 0, &stsd_body);
     body.extend_from_slice(&full_bx(b"stts", 0, 0, &0u32.to_be_bytes()));
@@ -152,15 +153,24 @@ fn stbl(params: &H264Params) -> Vec<u8> {
     bx(b"stbl", &body)
 }
 
-fn avc1(params: &H264Params) -> Vec<u8> {
+fn sample_entry(params: &VideoParams) -> Vec<u8> {
+    match params {
+        VideoParams::H264(p) => visual_sample_entry(b"avc1", p.width, p.height, &avcc(p)),
+        VideoParams::H265(p) => visual_sample_entry(b"hvc1", p.width, p.height, &hvcc(p)),
+    }
+}
+
+/// The fixed VisualSampleEntry preamble every video codec shares, followed by
+/// that codec's configuration box.
+fn visual_sample_entry(kind: &[u8; 4], width: u16, height: u16, config: &[u8]) -> Vec<u8> {
     let mut body = Vec::new();
     body.extend_from_slice(&[0; 6]); // reserved
     body.extend_from_slice(&1u16.to_be_bytes()); // data_reference_index
     body.extend_from_slice(&[0; 2]); // pre_defined
     body.extend_from_slice(&[0; 2]); // reserved
     body.extend_from_slice(&[0; 12]); // pre_defined
-    body.extend_from_slice(&params.width.to_be_bytes());
-    body.extend_from_slice(&params.height.to_be_bytes());
+    body.extend_from_slice(&width.to_be_bytes());
+    body.extend_from_slice(&height.to_be_bytes());
     body.extend_from_slice(&0x0048_0000u32.to_be_bytes()); // 72 dpi horizontal
     body.extend_from_slice(&0x0048_0000u32.to_be_bytes()); // 72 dpi vertical
     body.extend_from_slice(&[0; 4]); // reserved
@@ -168,8 +178,8 @@ fn avc1(params: &H264Params) -> Vec<u8> {
     body.extend_from_slice(&[0; 32]); // compressorname
     body.extend_from_slice(&0x0018u16.to_be_bytes()); // depth
     body.extend_from_slice(&0xffffu16.to_be_bytes()); // pre_defined
-    body.extend_from_slice(&avcc(params));
-    bx(b"avc1", &body)
+    body.extend_from_slice(config);
+    bx(kind, &body)
 }
 
 /// Rebuilds the AVCDecoderConfigurationRecord from the parameter sets.
@@ -194,6 +204,25 @@ fn avcc(params: &H264Params) -> Vec<u8> {
     body.extend_from_slice(&params.pps);
 
     bx(b"avcC", &body)
+}
+
+/// Rebuilds the HEVCDecoderConfigurationRecord: the 22-byte fixed head is
+/// copied from the source file's record (it holds profile/tier/level fields
+/// only an SPS bitstream parser could re-derive), then the parameter-set
+/// arrays are rebuilt from the sets we extracted, marked complete because the
+/// stream repeats nothing the record lacks.
+fn hvcc(params: &H265Params) -> Vec<u8> {
+    let mut body: Vec<u8> = params.config.iter().copied().take(22).collect();
+    body.resize(22, 0);
+
+    body.push(3); // numOfArrays: one per parameter set kind
+    for (nal_type, unit) in [(32u8, &params.vps), (33, &params.sps), (34, &params.pps)] {
+        body.push(0x80 | nal_type); // array_completeness + NAL unit type
+        body.extend_from_slice(&1u16.to_be_bytes()); // one NAL unit
+        body.extend_from_slice(&(unit.len() as u16).to_be_bytes());
+        body.extend_from_slice(unit);
+    }
+    bx(b"hvcC", &body)
 }
 
 fn mvex(track_id: u32) -> Vec<u8> {
@@ -284,9 +313,28 @@ mod tests {
     /// child boxes begin.
     const VISUAL_SAMPLE_ENTRY_LEN: usize = 78;
 
+    fn h265_params() -> H265Params {
+        // A plausible fixed head: version 1, Main profile, level 150, then
+        // filler up to lengthSizeMinusOne = 3 at byte 21.
+        let mut config = vec![0u8; 23];
+        config[0] = 1;
+        config[1] = 0x01;
+        config[12] = 150;
+        config[21] = 0xf0 | 3;
+        H265Params {
+            config,
+            vps: vec![0x40, 0x01, 0x0c],
+            sps: vec![0x42, 0x01, 0x01, 0x22],
+            pps: vec![0x44, 0x01, 0xc0],
+            nal_length_size: 4,
+            width: 2560,
+            height: 1920,
+        }
+    }
+
     fn init_segment() -> Vec<u8> {
         let mut init = ftyp();
-        init.extend_from_slice(&moov(&params(), 90_000, 1));
+        init.extend_from_slice(&moov(&VideoParams::H264(params()), 90_000, 1));
         init
     }
 
@@ -390,7 +438,8 @@ mod tests {
     fn fragments_advance_their_decode_time_and_sequence() {
         use crate::domain::ports::{FragmentSample, MediaFragmenter};
 
-        let mut fragmenter = super::super::Fmp4Fragmenter::new(params(), 90_000);
+        let mut fragmenter =
+            super::super::Fmp4Fragmenter::new(VideoParams::H264(params()), 90_000);
         let mut decode_times = Vec::new();
         let mut sequences = Vec::new();
 
@@ -428,5 +477,50 @@ mod tests {
     #[test]
     fn codec_strings_come_from_the_sps() {
         assert_eq!(params().codec_string(), "avc1.4d001f");
+    }
+
+    #[test]
+    fn hevc_parameter_sets_survive_a_round_trip_through_the_container() {
+        let original = h265_params();
+        let mut init = ftyp();
+        init.extend_from_slice(&moov(&VideoParams::H265(original.clone()), 90_000, 1));
+
+        let moov = atom::find(&init, b"moov").expect("moov");
+        let trak = atom::find(moov, b"trak").expect("trak");
+        let stbl = atom::find_path(trak, &[b"mdia", b"minf", b"stbl"]).expect("stbl");
+        let stsd = atom::find(stbl, b"stsd").expect("stsd");
+
+        let entry = atom::children(&stsd[8..]).next().expect("a sample entry");
+        assert_eq!(&entry.kind, b"hvc1");
+        assert_eq!(atom::u16_at(entry.body, 24).unwrap(), 2560);
+        assert_eq!(atom::u16_at(entry.body, 26).unwrap(), 1920);
+
+        let hvcc = atom::find(&entry.body[VISUAL_SAMPLE_ENTRY_LEN..], b"hvcC").expect("hvcC");
+        // The fixed head must come through from the source record.
+        assert_eq!(&hvcc[..22], &original.config[..22]);
+        assert_eq!(hvcc[21] & 0x03, 3, "four-byte NAL length prefixes");
+        assert_eq!(hvcc[22], 3, "one array per parameter set kind");
+
+        // Each array: completeness + type, a count of one, then the set.
+        let mut pos = 23usize;
+        for (nal_type, unit) in [(32u8, &original.vps), (33, &original.sps), (34, &original.pps)]
+        {
+            assert_eq!(hvcc[pos], 0x80 | nal_type);
+            assert_eq!(atom::u16_at(hvcc, pos + 1).unwrap(), 1);
+            let len = atom::u16_at(hvcc, pos + 3).unwrap() as usize;
+            assert_eq!(&hvcc[pos + 5..pos + 5 + len], &unit[..]);
+            pos += 5 + len;
+        }
+        assert_eq!(pos, hvcc.len(), "nothing after the last array");
+    }
+
+    #[test]
+    fn hevc_codec_strings_come_from_the_configuration_record() {
+        let mut params = h265_params();
+        // Main profile: compatibility flags 0x60000000 reverse to 6; one
+        // constraint byte set, the rest of the tail dropped.
+        params.config[2] = 0x60;
+        params.config[6] = 0xb0;
+        assert_eq!(params.codec_string(), "hvc1.1.6.L150.B0");
     }
 }

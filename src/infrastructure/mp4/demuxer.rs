@@ -9,7 +9,7 @@ use std::path::Path;
 
 use super::atom;
 use crate::domain::media::{
-    AacParams, CodecParams, H264Params, MediaSource, Sample, Track, TrackKind,
+    AacParams, CodecParams, H264Params, H265Params, MediaSource, Sample, Track, TrackKind,
 };
 use crate::domain::ports::{MediaProbe, SampleReader, SampleReaderFactory};
 use crate::domain::{Error, Result};
@@ -42,7 +42,7 @@ impl MediaProbe for Mp4Probe {
 
         if tracks.is_empty() {
             return Err(Error::UnsupportedMedia(format!(
-                "{} contains no H.264 video or AAC audio track",
+                "{} contains no H.264/H.265 video or AAC audio track",
                 path.display()
             )));
         }
@@ -179,6 +179,9 @@ fn parse_sample_description(stsd: &[u8], kind: TrackKind) -> Result<Option<Codec
         (TrackKind::Video, b"avc1") | (TrackKind::Video, b"avc3") => {
             Ok(Some(parse_avc_entry(entry.body)?))
         }
+        (TrackKind::Video, b"hvc1") | (TrackKind::Video, b"hev1") => {
+            Ok(Some(parse_hevc_entry(entry.body)?))
+        }
         (TrackKind::Audio, b"mp4a") => parse_mp4a_entry(entry.body),
         (_, other) => {
             eprintln!(
@@ -255,6 +258,70 @@ fn parse_avcc(b: &[u8]) -> Result<(Vec<u8>, Vec<u8>, usize)> {
         ));
     }
     Ok((sps, pps, nal_length_size))
+}
+
+fn parse_hevc_entry(body: &[u8]) -> Result<CodecParams> {
+    let width = atom::u16_at(body, 24)?;
+    let height = atom::u16_at(body, 26)?;
+    let children = body.get(VISUAL_SAMPLE_ENTRY_LEN..).ok_or_else(|| {
+        Error::MalformedContainer("hvc1 entry is shorter than a VisualSampleEntry".into())
+    })?;
+    let hvcc = atom::find(children, b"hvcC").ok_or_else(|| {
+        Error::UnsupportedMedia("H.265 track has no hvcC configuration record".into())
+    })?;
+    let (vps, sps, pps, nal_length_size) = parse_hvcc(hvcc)?;
+
+    Ok(CodecParams::H265(H265Params {
+        config: hvcc.to_vec(),
+        vps,
+        sps,
+        pps,
+        nal_length_size,
+        width,
+        height,
+    }))
+}
+
+/// HEVCDecoderConfigurationRecord (ISO/IEC 14496-15 §8.3.3.1): a 22-byte fixed
+/// head, then arrays of parameter-set NAL units grouped by type.
+fn parse_hvcc(b: &[u8]) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>, usize)> {
+    let nal_length_size = (atom::u8_at(b, 21)? & 0x03) as usize + 1;
+    let num_arrays = atom::u8_at(b, 22)? as usize;
+
+    let mut pos = 23usize;
+    let mut vps = Vec::new();
+    let mut sps = Vec::new();
+    let mut pps = Vec::new();
+    for _ in 0..num_arrays {
+        let nal_type = atom::u8_at(b, pos)? & 0x3f;
+        let count = atom::u16_at(b, pos + 1)? as usize;
+        pos += 3;
+        for _ in 0..count {
+            let len = atom::u16_at(b, pos)? as usize;
+            pos += 2;
+            let unit = b.get(pos..pos + len).ok_or_else(|| {
+                Error::MalformedContainer("hvcC parameter set runs past the box".into())
+            })?;
+            // As with avcC, extra parameter sets are legal; the first of each
+            // type is the one we advertise.
+            match nal_type {
+                32 if vps.is_empty() => vps = unit.to_vec(),
+                33 if sps.is_empty() => sps = unit.to_vec(),
+                34 if pps.is_empty() => pps = unit.to_vec(),
+                _ => {}
+            }
+            pos += len;
+        }
+    }
+
+    // hev1 permits parameter sets to travel only in-band, in which case the
+    // arrays are empty and there is nothing to put in the SDP.
+    if vps.is_empty() || sps.is_empty() || pps.is_empty() {
+        return Err(Error::UnsupportedMedia(
+            "hvcC carries no VPS/SPS/PPS; in-band-only parameter sets are not supported".into(),
+        ));
+    }
+    Ok((vps, sps, pps, nal_length_size))
 }
 
 fn parse_mp4a_entry(body: &[u8]) -> Result<Option<CodecParams>> {
@@ -734,6 +801,42 @@ mod tests {
         // Zero SPS and zero PPS entries.
         let avcc = vec![1, 0x42, 0x00, 0x1e, 0xff, 0xe0, 0x00];
         assert!(parse_avcc(&avcc).is_err());
+    }
+
+    /// A minimal HEVCDecoderConfigurationRecord: 22 fixed bytes, then arrays.
+    fn hvcc_with_arrays(arrays: &[(u8, &[u8])]) -> Vec<u8> {
+        let mut hvcc = vec![0u8; 21];
+        hvcc[0] = 1; // configurationVersion
+        hvcc.push(0xfc | 3); // four-byte NAL length prefixes
+        hvcc.push(arrays.len() as u8);
+        for (nal_type, unit) in arrays {
+            hvcc.push(0x80 | nal_type);
+            hvcc.extend_from_slice(&1u16.to_be_bytes());
+            hvcc.extend_from_slice(&(unit.len() as u16).to_be_bytes());
+            hvcc.extend_from_slice(unit);
+        }
+        hvcc
+    }
+
+    #[test]
+    fn hvcc_yields_the_parameter_sets_and_length_prefix_width() {
+        let vps = [0x40u8, 0x01, 0x0c];
+        let sps = [0x42u8, 0x01, 0x01];
+        let pps = [0x44u8, 0x01, 0xc0];
+        let hvcc = hvcc_with_arrays(&[(32, &vps), (33, &sps), (34, &pps)]);
+
+        let (got_vps, got_sps, got_pps, length_size) = parse_hvcc(&hvcc).unwrap();
+        assert_eq!(got_vps, vps);
+        assert_eq!(got_sps, sps);
+        assert_eq!(got_pps, pps);
+        assert_eq!(length_size, 4);
+    }
+
+    #[test]
+    fn hvcc_without_parameter_sets_is_rejected() {
+        // An SEI array alone leaves a decoder with nothing to start from.
+        let hvcc = hvcc_with_arrays(&[(39, &[0x4e, 0x01])]);
+        assert!(parse_hvcc(&hvcc).is_err());
     }
 
     #[test]

@@ -134,7 +134,7 @@ impl StreamControl {
 
 fn preview_kind(source: &MediaSource) -> Option<&'static str> {
     source.tracks.iter().find_map(|t| match &t.codec {
-        CodecParams::H264(_) => Some("video"),
+        CodecParams::H264(_) | CodecParams::H265(_) => Some("video"),
         CodecParams::Jpeg(_) => Some("image"),
         CodecParams::Aac(_) => None,
     })
@@ -147,6 +147,7 @@ fn describe_tracks(source: &MediaSource) -> Vec<TrackStatus> {
         .map(|track| {
             let codec_string = match &track.codec {
                 CodecParams::H264(p) => Some(p.codec_string()),
+                CodecParams::H265(p) => Some(p.codec_string()),
                 // Neither goes through the MSE preview: AAC is not carried
                 // at all, and JPEG previews as a still image instead.
                 CodecParams::Aac(_) | CodecParams::Jpeg(_) => None,
@@ -168,6 +169,10 @@ fn describe_tracks(source: &MediaSource) -> Vec<TrackStatus> {
                         format!("{}x{} at {fps:.2} fps", p.width, p.height),
                     )
                 }
+                CodecParams::H265(p) => (
+                    "H.265".to_string(),
+                    format!("{}x{} at {fps:.2} fps", p.width, p.height),
+                ),
                 CodecParams::Aac(p) => (
                     "AAC".to_string(),
                     format!(
